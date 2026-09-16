@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fusion Agent Demo Fixture</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 460px; margin: 40px auto; }
+    label { display: block; margin-top: 12px; font-size: 14px; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: 6px; margin-top: 4px; font-family: inherit; }
+    img { margin-top: 12px; border-radius: 50%; }
+    button { margin-top: 20px; padding: 8px 16px; }
+    #result { margin-top: 12px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Create your account</h1>
+  <!-- Same field shape as eval/fixture.ts, so a live run here should match the eval numbers. -->
+  <form id="registration-form">
+    <label>Full name
+      <input id="fullname" type="text" name="fullname" placeholder="Jane Doe" autocomplete="name" />
+    </label>
+    <label>Email
+      <input id="email" type="email" name="email" placeholder="jane@example.com" autocomplete="email" />
+    </label>
+    <label>Password
+      <input id="password" type="password" name="password" placeholder="********" autocomplete="new-password" />
+    </label>
+    <label>Card number
+      <input id="card" type="text" name="cc-number" placeholder="4111 1111 1111 1111" autocomplete="cc-number" />
+    </label>
+    <label>Phone
+      <input id="phone" type="tel" name="phone" placeholder="+1 555 123 4567" autocomplete="tel" />
+    </label>
+    <label>Short bio (control field, must NOT be redacted)
+      <textarea id="bio" name="bio" placeholder="Tell us about yourself"></textarea>
+    </label>
+    <label>Favorite color (control field, must NOT be redacted)
+      <select id="favorite_color" name="favorite_color">
+        <option value="blue">Blue</option>
+        <option value="green">Green</option>
+        <option value="red">Red</option>
+      </select>
+    </label>
+
+    <img id="profile-photo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Head_shoulders_mirrored.png/220px-Head_shoulders_mirrored.png" width="120" alt="profile" />
+
+    <button type="submit" id="submit">Submit</button>
+  </form>
+  <div id="result"></div>
+
+  <script>
+    document.getElementById("registration-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      document.getElementById("result").textContent = "Form submitted successfully.";
+    });
+  </script>
+</body>
+</html>

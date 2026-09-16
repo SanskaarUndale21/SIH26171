@@ -1,0 +1,99 @@
+{
+  "generatedAt": "2026-09-16T18:14:28.322Z",
+  "fusion": {
+    "manifestEntries": 7,
+    "truePositives": 5,
+    "falseNegatives": 0,
+    "falsePositives": 0,
+    "trueNegatives": 2,
+    "recall": 1,
+    "precision": 1,
+    "latencyMs": 0.619
+  },
+  "regexPii": {
+    "cases": 4,
+    "truePositiveMatches": 3,
+    "falseNegativeMatches": 0,
+    "falsePositiveCardMatches": 0,
+    "latencyMs": 0.802
+  },
+  "manifest": [
+    {
+      "type": "email",
+      "bbox": [
+        40,
+        100,
+        300,
+        24
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "password_field",
+      "bbox": [
+        40,
+        140,
+        300,
+        24
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "card_number",
+      "bbox": [
+        40,
+        180,
+        300,
+        24
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "phone_number",
+      "bbox": [
+        40,
+        220,
+        300,
+        24
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "person_name",
+      "bbox": [
+        40,
+        60,
+        300,
+        24
+      ],
+      "confidence": 0.72,
+      "method": "blackbox"
+    },
+    {
+      "type": "face",
+      "bbox": [
+        400,
+        60,
+        120,
+        120
+      ],
+      "confidence": 0.93,
+      "method": "blackbox"
+    },
+    {
+      "type": "phone_number",
+      "bbox": [
+        40,
+        260,
+        60,
+        20
+      ],
+      "confidence": 0.30000000000000004,
+      "method": "blackbox"
+    }
+  ]
+}

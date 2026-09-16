@@ -1,0 +1,11 @@
+{
+  "name": "privacy-browser-agent-eval",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eval": "node run.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Fusion Privacy Agent",
+  "version": "0.1.0",
+  "description": "On-device visual perception, live redaction overlay, and eval-backed PII protection for a lightweight browser agent (SIH 26171)",
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "offscreen", "sidePanel"],
+  "host_permissions": [
+    "http://localhost:8100/*",
+    "https://huggingface.co/*",
+    "https://cdn-lfs.huggingface.co/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {},
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
