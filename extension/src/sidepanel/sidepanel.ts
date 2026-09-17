@@ -257,68 +257,89 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
   }
 });
 
-// Voice input. SpeechRecognition is Chrome's built-in speech-to-text -- no new dependency --
-// but it is NOT on-device: Chrome sends the audio to Google's speech recognition service to
-// transcribe it, the same as using voice search. That's a real, separate data path from this
-// project's redaction pipeline (which only ever concerns screen content, not microphone
-// audio) and is standard browser behavior outside this extension's control, but it's worth
-// being explicit about rather than implying "voice" is covered by the same privacy guarantee
-// as the screen redaction. This could not be verified inside a real Chrome side panel in this
-// environment (no live browser available while building it) -- if it fails to start at all,
-// that is the most likely reason, not a logic bug here.
-const SpeechRecognitionCtor: (new () => any) | undefined =
-  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-let recognition: any = null;
+// Voice input, push-to-talk: click to start recording, click again to stop and transcribe.
+// This used to run on Chrome's built-in SpeechRecognition (webkitSpeechRecognition), which
+// turned out to be a dead end on two counts -- Chrome does not expose that API to
+// chrome-extension:// origins at all (it's undefined there), which is the actual reason voice
+// input never worked from this side panel; and even where it does work, it sends raw audio to
+// Google's servers, a separate data path this project's whole design argues against. This
+// records locally via getUserMedia (a normal, universally-supported API, unlike
+// SpeechRecognition) and transcribes with a small Whisper model running on-device in this
+// same page (see perception/asr.ts) -- audio never leaves the browser.
 let listening = false;
+let mediaStream: MediaStream | null = null;
+let mediaRecorder: MediaRecorder | null = null;
+let audioChunks: Blob[] = [];
 
 function setListening(value: boolean): void {
   listening = value;
   micButton.classList.toggle("listening", value);
 }
 
-function startListening(): void {
-  if (!SpeechRecognitionCtor) {
-    addMessage("error", "Voice input isn't available in this browser context.");
+function mixToMono(buffer: AudioBuffer): Float32Array {
+  const out = new Float32Array(buffer.length);
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) out[i] += data[i] / buffer.numberOfChannels;
+  }
+  return out;
+}
+
+async function startRecording(): Promise<void> {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    addMessage("error", "Microphone access was denied or unavailable: " + String(err));
     return;
   }
-  if (listening) {
-    recognition?.stop();
-    return;
-  }
-
-  recognition = new SpeechRecognitionCtor();
-  recognition.lang = "en-US";
-  recognition.interimResults = true;
-  recognition.continuous = false;
-
-  recognition.onstart = () => setListening(true);
-  recognition.onend = () => setListening(false);
-  recognition.onerror = (event: any) => {
-    setListening(false);
-    addMessage("error", "Voice input error: " + (event?.error ?? "unknown"));
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) audioChunks.push(e.data);
   };
+  mediaRecorder.start();
+  setListening(true);
+}
 
-  recognition.onresult = (event: any) => {
-    let finalTranscript = "";
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      if (event.results[i].isFinal) finalTranscript += transcript;
-      else interim += transcript;
+async function stopRecordingAndTranscribe(): Promise<void> {
+  const recorder = mediaRecorder;
+  if (!recorder) return;
+  const mimeType = recorder.mimeType;
+  const blob: Blob = await new Promise((resolve) => {
+    recorder.onstop = () => resolve(new Blob(audioChunks, { type: mimeType }));
+    recorder.stop();
+  });
+  mediaStream?.getTracks().forEach((t) => t.stop());
+  mediaStream = null;
+  mediaRecorder = null;
+  setListening(false);
+
+  const thinkingEl = addMessage("system", "Transcribing locally (first run downloads/loads the on-device model)...");
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    // Whisper expects mono audio at 16kHz -- creating the AudioContext with that sample rate
+    // makes decodeAudioData resample to it, so no separate resampling step is needed.
+    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    const samples = decoded.numberOfChannels > 1 ? mixToMono(decoded) : decoded.getChannelData(0);
+    const { transcribeAudio } = await import("../perception/asr");
+    const text = await transcribeAudio(samples);
+    thinkingEl.remove();
+
+    if (!text) {
+      addMessage("error", "Didn't catch any speech in that recording -- try again.");
+      return;
     }
-    goalInput.value = (finalTranscript || interim).trim();
+    goalInput.value = text;
     autoGrow();
 
-    if (!finalTranscript) return;
-    const lower = finalTranscript.toLowerCase();
-
+    const lower = text.toLowerCase();
     if (pendingAskUserRespond) {
       // Free-text answer, not a yes/no -- whatever was said is the value to fill in.
-      pendingAskUserRespond(finalTranscript.trim() || null);
+      pendingAskUserRespond(text || null);
       goalInput.value = "";
       return;
     }
-
     if (pendingConfirmRespond) {
       if (/\b(yes|confirm|go ahead|do it|proceed)\b/.test(lower)) {
         pendingConfirmRespond(true);
@@ -331,14 +352,22 @@ function startListening(): void {
         return;
       }
     }
-
     runTask();
-  };
-
-  recognition.start();
+  } catch (err) {
+    thinkingEl.remove();
+    addMessage("error", "Voice transcription failed: " + String(err));
+  }
 }
 
-micButton.addEventListener("click", startListening);
+function toggleListening(): void {
+  if (listening) {
+    void stopRecordingAndTranscribe();
+  } else {
+    void startRecording();
+  }
+}
+
+micButton.addEventListener("click", toggleListening);
 
 voiceToggle.addEventListener("click", () => {
   voiceEnabled = !voiceEnabled;
