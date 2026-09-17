@@ -125,16 +125,48 @@
       }
       #send:disabled { background: #93c5fd; cursor: default; }
       #send:hover:not(:disabled) { background: #1d4ed8; }
+
+      #mic {
+        border: 1px solid #d1d5db;
+        background: #fff;
+        border-radius: 10px;
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        cursor: pointer;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #mic.listening { background: #fee2e2; border-color: #ef4444; animation: pulse 1s infinite; }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+      #voiceToggle {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 13px;
+        color: #6b7280;
+        padding: 2px 4px;
+      }
+      #voiceToggle.off { text-decoration: line-through; opacity: 0.5; }
+      header { display: flex; align-items: flex-start; justify-content: space-between; }
+      header .title-block { flex: 1; }
     </style>
   </head>
   <body>
     <header>
-      <h1>Fusion Privacy Agent</h1>
-      <p>PII is redacted on-device before anything is sent</p>
+      <div class="title-block">
+        <h1>Fusion Privacy Agent</h1>
+        <p>PII is redacted on-device before anything is sent</p>
+      </div>
+      <button id="voiceToggle" title="Toggle spoken responses">&#128266; voice</button>
     </header>
     <div id="messages"></div>
     <div id="composer">
-      <textarea id="goal" placeholder="Tell it what to do on this page..." rows="1"></textarea>
+      <button id="mic" title="Speak your task">&#127908;</button>
+      <textarea id="goal" placeholder="Tell it what to do, or press the mic..." rows="1"></textarea>
       <button id="send" title="Run task">&#8593;</button>
     </div>
     <script type="module" src="./src/sidepanel/sidepanel.ts"></script>

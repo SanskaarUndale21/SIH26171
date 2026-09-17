@@ -58,6 +58,19 @@ function waitForTabLoad(tabId: number, timeoutMs = 10000): Promise<void> {
   });
 }
 
+// Deliberately re-derived from the CHOSEN action, not the request-level risk_tier field.
+// risk_tier (privacy/manifest.ts) is computed from the page's ambient structured summary --
+// e.g. "does this page have a submit button anywhere" -- before the planner has even picked
+// an action, so it flags every task on a page with a submit button (a Google Form, say) as
+// high-risk regardless of what's actually being done, including something unrelated like
+// "open a new tab". The confirmation gate needs to ask "is THIS step a submit/payment/
+// destructive click", not "does this page contain one somewhere".
+function isHighRiskAction(action: NextActionResponse): boolean {
+  if (action.action !== "click") return false;
+  const haystack = (action.target.selector ?? "").toLowerCase();
+  return /submit|pay|payment|delete|confirm|purchase|checkout|transfer/.test(haystack);
+}
+
 async function ensureOffscreenDocument(): Promise<void> {
   const existing = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]
@@ -149,11 +162,11 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     // action pauses for the user's explicit go-ahead instead of firing immediately. Routine
     // actions (typing into a field, scrolling, clicking a non-destructive control) proceed
     // without asking.
-    if (buildResponse.payload.risk_tier === "high_risk") {
+    if (isHighRiskAction(action)) {
       const requestId = genId();
       const approved = await new Promise<boolean>((resolve) => {
         pendingConfirms.set(requestId, resolve);
-        broadcast({ type: "CONFIRM_REQUEST", runId, requestId, step, action, riskTier: buildResponse.payload.risk_tier });
+        broadcast({ type: "CONFIRM_REQUEST", runId, requestId, step, action, riskTier: "high_risk" });
       });
       pendingConfirms.delete(requestId);
       if (!approved) {
