@@ -21,11 +21,20 @@ function genId(): string {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Math.random().toString(36).slice(2);
 }
 
-// Broadcasts to every extension context (the side panel, chiefly). If nothing is listening
-// right now the send just fails silently -- there's no persistent run state to recover, this
-// is a live progress stream, not a queue.
+// Broadcasts to every extension-page context (the side panel, chiefly). If nothing is
+// listening right now the send just fails silently -- there's no persistent run state to
+// recover, this is a live progress stream, not a queue.
 function broadcast(message: ExtensionMessage): void {
   chrome.runtime.sendMessage(message).catch(() => undefined);
+}
+
+// chrome.runtime.sendMessage does NOT reach content scripts (only other extension pages) --
+// a content script needs chrome.tabs.sendMessage targeted at its specific tab. The pill
+// (content/pill.ts) needs the same TASK_STEP/TASK_DONE/CONFIRM_REQUEST stream the side panel
+// gets, so every progress broadcast during the loop goes out both ways.
+function broadcastAll(tabId: number, message: ExtensionMessage): void {
+  broadcast(message);
+  chrome.tabs.sendMessage(tabId, message).catch(() => undefined);
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
@@ -125,7 +134,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
   for (let step = 1; step <= MAX_STEPS; step++) {
     if (cancelledRuns.has(runId)) {
       cancelledRuns.delete(runId);
-      broadcast({ type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped by user." });
+      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped by user." });
       return;
     }
 
@@ -133,7 +142,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       | GetDomSnapshotResponse
       | { ok: false; error: string };
     if (!domResponse.ok) {
-      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Failed to read page DOM: " + domResponse.error });
+      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Failed to read page DOM: " + domResponse.error });
       return;
     }
 
@@ -154,7 +163,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     };
     const buildResponse = (await chrome.runtime.sendMessage(buildMsg)) as BuildContextResponse | { ok: false; error: string };
     if (!buildResponse.ok) {
-      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Failed to build sanitized context: " + buildResponse.error });
+      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Failed to build sanitized context: " + buildResponse.error });
       return;
     }
 
@@ -166,12 +175,12 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     try {
       action = await requestNextAction(buildResponse.payload);
     } catch (err) {
-      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Planner request failed: " + String(err) });
+      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Planner request failed: " + String(err) });
       return;
     }
 
     if (action.action === "none") {
-      broadcast({
+      broadcastAll(tabId, {
         type: "TASK_STEP",
         runId,
         step,
@@ -179,7 +188,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
         action,
         redactionManifest: buildResponse.payload.redaction_manifest
       });
-      broadcast({ type: "TASK_DONE", runId, reason: "completed", message: "Done." });
+      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "completed", message: "Done." });
       return;
     }
 
@@ -191,11 +200,11 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       const requestId = genId();
       const approved = await new Promise<boolean>((resolve) => {
         pendingConfirms.set(requestId, resolve);
-        broadcast({ type: "CONFIRM_REQUEST", runId, requestId, step, action, riskTier: "high_risk" });
+        broadcastAll(tabId, { type: "CONFIRM_REQUEST", runId, requestId, step, action, riskTier: "high_risk" });
       });
       pendingConfirms.delete(requestId);
       if (!approved) {
-        broadcast({ type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped before a high-risk action (not confirmed)." });
+        broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped before a high-risk action (not confirmed)." });
         return;
       }
     }
@@ -252,7 +261,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       `step ${step}: ${action.action}${action.target.selector ? ` on ${action.target.selector}` : ""} -> ${stepStatus}`
     );
 
-    broadcast({
+    broadcastAll(tabId, {
       type: "TASK_STEP",
       runId,
       step,
@@ -265,23 +274,35 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       // A failed action (stale selector, element gone after a re-render, ...) could in
       // principle be retried, but retrying blindly risks looping on a broken step forever --
       // stop and let the user look, rather than guess.
-      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Stopped after a failed action." });
+      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Stopped after a failed action." });
       return;
     }
 
     await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
   }
 
-  broadcast({ type: "TASK_DONE", runId, reason: "max_steps", message: `Stopped after ${MAX_STEPS} steps without finishing.` });
+  broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "max_steps", message: `Stopped after ${MAX_STEPS} steps without finishing.` });
 }
 
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+// Both the side panel and the pill can trigger RUN_TASK, and both are always available at
+// once -- without this, clicking "run" in both surfaces at the same time would start two
+// loops fighting over the same tab's DOM/screenshot/redaction state.
+let currentRunId: string | null = null;
+
+chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
   if (message.type === "RUN_TASK") {
+    if (currentRunId) {
+      sendResponse({ ok: false, error: "A task is already running -- wait for it to finish or stop it first." });
+      return false;
+    }
     const runId = genId();
+    currentRunId = runId;
     sendResponse({ ok: true, runId });
-    runAgentLoop(runId, message.taskGoal).catch((err) =>
-      broadcast({ type: "TASK_DONE", runId, reason: "error", message: String(err) })
-    );
+    runAgentLoop(runId, message.taskGoal)
+      .catch((err) => broadcast({ type: "TASK_DONE", runId, reason: "error", message: String(err) }))
+      .finally(() => {
+        if (currentRunId === runId) currentRunId = null;
+      });
     return true;
   }
 
@@ -294,6 +315,15 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
 
   if (message.type === "CANCEL_TASK") {
     cancelledRuns.add(message.runId);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message.type === "OPEN_SIDE_PANEL") {
+    const windowId = sender.tab?.windowId;
+    if (windowId !== undefined) {
+      chrome.sidePanel.open({ windowId }).catch(() => undefined);
+    }
     sendResponse({ ok: true });
     return false;
   }

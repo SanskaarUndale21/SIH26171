@@ -84,6 +84,14 @@ export interface CancelTaskMessage {
   runId: string;
 }
 
+// Pill (content script) -> background: best-effort request to open the full side panel.
+// chrome.sidePanel.open() requires a user gesture; this is sent synchronously from the
+// pill's own click handler so the gesture context carries through, but whether Chrome
+// honors a gesture relayed this way from a content script was not verified live.
+export interface OpenSidePanelMessage {
+  type: "OPEN_SIDE_PANEL";
+}
+
 export type ExtensionMessage =
   | GetDomSnapshotMessage
   | ExecuteActionMessage
@@ -94,7 +102,8 @@ export type ExtensionMessage =
   | TaskDoneMessage
   | ConfirmRequestMessage
   | ConfirmResponseMessage
-  | CancelTaskMessage;
+  | CancelTaskMessage
+  | OpenSidePanelMessage;
 
 export interface GetDomSnapshotResponse {
   ok: true;
