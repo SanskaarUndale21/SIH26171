@@ -1,3 +1,4 @@
+import "./env-setup";
 import {
   AutoProcessor,
   AutoModelForCausalLM,
@@ -26,8 +27,12 @@ async function getHandle(): Promise<FlorenceHandle> {
   if (!handlePromise) {
     handlePromise = (async () => {
       const processor = await AutoProcessor.from_pretrained(MODEL_ID);
+      // "q8" matches the quantized onnx files actually bundled locally under
+      // public/models/onnx-community/Florence-2-base-ft/onnx/ (*_quantized.onnx) -- fp32
+      // would be ~4x larger for all four sub-modules (encoder, decoder, vision encoder,
+      // embed tokens) and was never downloaded.
       const model = await AutoModelForCausalLM.from_pretrained(MODEL_ID, {
-        dtype: "fp32",
+        dtype: "q8",
         device: "webgpu"
       });
       return { model, processor };

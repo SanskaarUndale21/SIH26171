@@ -14,7 +14,13 @@ import { COCO_CLASSES } from "./cocoClasses";
 // photographed person adjacent to a face crop); DOM introspection remains the primary and
 // authoritative source for form-field/button detection, and Florence-2 dense captioning
 // (florence.ts) is the vision-only fallback for open-vocabulary element description.
-const MODEL_URL = "https://huggingface.co/webnn/yolov8n/resolve/main/onnx/model_fp16.onnx";
+// Bundled locally under public/yolo/ -- no network fetch at runtime. Resolved lazily inside
+// getSession() rather than at module scope: chrome.runtime.getURL is unavailable until the
+// extension APIs are ready, and this keeps the file importable in the eval harness's Node
+// bundle too.
+function modelUrl(): string {
+  return chrome.runtime.getURL("yolo/model_fp16.onnx");
+}
 const INPUT_SIZE = 640;
 const CONFIDENCE_THRESHOLD = 0.4;
 const IOU_THRESHOLD = 0.45;
@@ -30,7 +36,7 @@ let sessionPromise: Promise<ort.InferenceSession> | null = null;
 async function getSession(): Promise<ort.InferenceSession> {
   if (!sessionPromise) {
     ort.env.wasm.wasmPaths = chrome.runtime.getURL("assets/");
-    sessionPromise = ort.InferenceSession.create(MODEL_URL, {
+    sessionPromise = ort.InferenceSession.create(modelUrl(), {
       executionProviders: ["webgpu", "wasm"]
     });
   }

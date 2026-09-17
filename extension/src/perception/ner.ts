@@ -1,3 +1,4 @@
+import "./env-setup";
 import { pipeline as createPipeline, type TokenClassificationPipeline } from "@huggingface/transformers";
 
 const pipeline: (task: string, model: string, options?: Record<string, unknown>) => Promise<TokenClassificationPipeline> =
@@ -19,8 +20,13 @@ let pipelinePromise: Promise<TokenClassificationPipeline> | null = null;
 
 async function getPipeline(): Promise<TokenClassificationPipeline> {
   if (!pipelinePromise) {
+    // dtype must be explicit and match a file actually bundled locally (see
+    // public/models/Xenova/bert-base-NER/onnx/) -- "auto" or an unspecified default on
+    // webgpu resolves to unsuffixed fp32, which was never downloaded, so the fetch to the
+    // local model path would 404. "q8" maps to the bundled model_quantized.onnx.
     pipelinePromise = pipeline("token-classification", MODEL_ID, {
-      device: "webgpu"
+      device: "webgpu",
+      dtype: "q8"
     });
   }
   return pipelinePromise;

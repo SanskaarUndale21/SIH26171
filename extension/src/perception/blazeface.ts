@@ -11,13 +11,12 @@ let detectorPromise: Promise<FaceDetector> | null = null;
 async function getDetector(): Promise<FaceDetector> {
   if (!detectorPromise) {
     detectorPromise = (async () => {
-      const fileset = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm"
-      );
+      // Both the wasm runtime and the model weights are bundled locally (public/mediapipe-wasm/,
+      // public/blazeface/) -- no CDN or Google Storage fetch at runtime, works fully offline.
+      const fileset = await FilesetResolver.forVisionTasks(chrome.runtime.getURL("mediapipe-wasm"));
       return FaceDetector.createFromOptions(fileset, {
         baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+          modelAssetPath: chrome.runtime.getURL("blazeface/blaze_face_short_range.tflite"),
           delegate: "GPU"
         },
         runningMode: "IMAGE"
