@@ -5,7 +5,7 @@ import type {
   ExtensionMessage,
   GetDomSnapshotResponse
 } from "../messages";
-import type { NextActionResponse } from "../types";
+import type { NextActionResponse, RedactionEntry } from "../types";
 import { requestNextAction } from "./server";
 
 const OFFSCREEN_URL = "offscreen.html";
@@ -105,6 +105,19 @@ function isHighRiskAction(action: NextActionResponse): boolean {
   return /submit|pay|payment|delete|confirm|purchase|checkout|transfer/.test(haystack);
 }
 
+// Real gap found live: a run correctly never types into password/email/card/phone fields
+// (it can't see their values), but was then clicking Submit anyway with those fields still
+// empty and calling the task done -- no error, but not what "fill the form" means either.
+// This doesn't try to track which fields got manually filled in the meantime (the extension
+// has no visibility into that without re-reading the DOM, which would need another full
+// perception pass); it just surfaces what's STILL redacted right now, at the moment of
+// deciding whether to submit, so the confirmation prompt gives the user an honest, specific
+// reason to go check before saying yes.
+function unfilledSensitiveTypes(manifest: RedactionEntry[]): string[] {
+  const piiTypes = new Set(["password_field", "card_number", "email", "phone_number"]);
+  return [...new Set(manifest.map((entry) => entry.type).filter((type) => piiTypes.has(type)))];
+}
+
 async function ensureOffscreenDocument(): Promise<void> {
   const existing = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]
@@ -200,7 +213,15 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       const requestId = genId();
       const approved = await new Promise<boolean>((resolve) => {
         pendingConfirms.set(requestId, resolve);
-        broadcastAll(tabId, { type: "CONFIRM_REQUEST", runId, requestId, step, action, riskTier: "high_risk" });
+        broadcastAll(tabId, {
+          type: "CONFIRM_REQUEST",
+          runId,
+          requestId,
+          step,
+          action,
+          riskTier: "high_risk",
+          unfilledSensitiveTypes: unfilledSensitiveTypes(buildResponse.payload.redaction_manifest)
+        });
       });
       pendingConfirms.delete(requestId);
       if (!approved) {

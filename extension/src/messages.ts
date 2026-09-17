@@ -69,6 +69,12 @@ export interface ConfirmRequestMessage {
   step: number;
   action: NextActionResponse;
   riskTier: RiskTier;
+  // Real gap found live: the agent correctly never fills password/email/card/phone fields
+  // (it can't see their values, by design) but was silently clicking Submit anyway with
+  // those fields still empty -- technically "successful", but not what filling a form means.
+  // The PII types still present in the redaction manifest at confirmation time, so the user
+  // gets an actual chance to go fill them in before saying yes.
+  unfilledSensitiveTypes: string[];
 }
 
 // Sidepanel -> background: the user's answer to a ConfirmRequestMessage.

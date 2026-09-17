@@ -74,13 +74,26 @@ function setRunning(running: boolean): void {
   }
 }
 
-function addConfirmPrompt(requestId: string, action: NextActionResponse, riskTier: RiskTier): void {
+function addConfirmPrompt(
+  requestId: string,
+  action: NextActionResponse,
+  riskTier: RiskTier,
+  unfilledSensitiveTypes: string[]
+): void {
   const el = document.createElement("div");
   el.className = "msg agent";
   const label = document.createElement("div");
-  const questionText = `This looks like a ${riskTier.replace("_", " ")} action: ${action.action}${
+  let questionText = `This looks like a ${riskTier.replace("_", " ")} action: ${action.action}${
     action.target.selector ? ` on ${action.target.selector}` : ""
-  }. Go ahead? You can say yes or no.`;
+  }.`;
+  // Real bug this closes: the agent correctly never fills password/email/card/phone (it
+  // can't see their values), but was silently submitting anyway with them still empty and
+  // calling the task done. Surfacing what's still redacted here gives the user an actual
+  // chance to go fill those in before confirming, instead of finding out after the fact.
+  if (unfilledSensitiveTypes.length > 0) {
+    questionText += ` Note: ${unfilledSensitiveTypes.join(", ")} on this page were never filled in by the agent (by design) -- make sure you've filled them in yourself if this form needs them.`;
+  }
+  questionText += " Go ahead? You can say yes or no.";
   label.textContent = questionText;
   speak(questionText);
   el.appendChild(label);
@@ -172,7 +185,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
     if (message.runId !== activeRunId) return;
     activeThinkingEl?.remove();
     activeThinkingEl = null;
-    addConfirmPrompt(message.requestId, message.action, message.riskTier);
+    addConfirmPrompt(message.requestId, message.action, message.riskTier, message.unfilledSensitiveTypes);
     return;
   }
 });

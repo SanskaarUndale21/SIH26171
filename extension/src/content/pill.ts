@@ -65,16 +65,26 @@ function setRunning(running: boolean): void {
   }
 }
 
-function showConfirm(requestId: string, action: NextActionResponse, riskTier: RiskTier): void {
+function showConfirm(
+  requestId: string,
+  action: NextActionResponse,
+  riskTier: RiskTier,
+  unfilledSensitiveTypes: string[]
+): void {
   if (!confirmRow || !root) return;
   pendingConfirmRequestId = requestId;
   confirmRow.innerHTML = "";
   confirmRow.style.display = "flex";
 
   const label = document.createElement("div");
-  label.textContent = `${riskTier.replace("_", " ")}: ${action.action}${
+  let text = `${riskTier.replace("_", " ")}: ${action.action}${
     action.target.selector ? ` on ${action.target.selector}` : ""
-  }. Go ahead?`;
+  }.`;
+  if (unfilledSensitiveTypes.length > 0) {
+    text += ` ${unfilledSensitiveTypes.join(", ")} still empty (agent never fills these).`;
+  }
+  text += " Go ahead?";
+  label.textContent = text;
   label.style.cssText = "font-size:11px;color:#e5e7eb;margin-bottom:4px;";
   confirmRow.appendChild(label);
 
@@ -138,6 +148,7 @@ export function handlePillMessage(message: {
   action?: NextActionResponse;
   riskTier?: RiskTier;
   redactionManifest?: RedactionEntry[];
+  unfilledSensitiveTypes?: string[];
 }): void {
   if (message.type === "TASK_STEP" && message.runId === activeRunId) {
     setStatus(`Step ${(message as any).step}: ${message.status}`);
@@ -145,7 +156,7 @@ export function handlePillMessage(message: {
     setRunning(false);
     setStatus(message.message ?? "Done.", message.message?.toLowerCase().includes("error"));
   } else if (message.type === "CONFIRM_REQUEST" && message.runId === activeRunId && message.action && message.riskTier) {
-    showConfirm(message.requestId!, message.action, message.riskTier);
+    showConfirm(message.requestId!, message.action, message.riskTier, message.unfilledSensitiveTypes ?? []);
   }
 }
 
