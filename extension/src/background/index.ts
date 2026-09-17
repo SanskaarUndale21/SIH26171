@@ -3,18 +3,30 @@ import type {
   BuildContextResponse,
   ExecuteActionResponse,
   ExtensionMessage,
-  GetDomSnapshotResponse,
-  ShowOverlayMessage
+  GetDomSnapshotResponse
 } from "../messages";
-import type { NextActionResponse, RedactionEntry } from "../types";
+import type { NextActionResponse } from "../types";
 import { requestNextAction } from "./server";
 
 const OFFSCREEN_URL = "offscreen.html";
+const MAX_STEPS = 15;
+const STEP_SETTLE_MS = 700;
 
 // Clicking the toolbar icon opens the side panel instead of a popup -- a persistent sidebar
 // that stays open while you navigate, rather than a transient window that closes the moment
 // focus leaves it.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
+
+function genId(): string {
+  return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+}
+
+// Broadcasts to every extension context (the side panel, chiefly). If nothing is listening
+// right now the send just fails silently -- there's no persistent run state to recover, this
+// is a live progress stream, not a queue.
+function broadcast(message: ExtensionMessage): void {
+  chrome.runtime.sendMessage(message).catch(() => undefined);
+}
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -35,63 +47,154 @@ async function ensureOffscreenDocument(): Promise<void> {
   });
 }
 
-interface RunTaskResult {
-  status: string;
-  action?: NextActionResponse;
-  redactionManifest?: RedactionEntry[];
-}
+const cancelledRuns = new Set<string>();
+const pendingConfirms = new Map<string, (approved: boolean) => void>();
 
-async function runTask(taskGoal: string): Promise<RunTaskResult> {
+// The actual agent loop: observe (DOM + screenshot) -> redact+plan -> act -> observe again,
+// until the planner says "none" (done), a step budget is hit, an action fails, or the user
+// cancels. This is what makes it an agent rather than a single-shot "click one thing" tool --
+// each step's outcome is folded into the next step's prompt as a short history, so the
+// planner knows what it already tried.
+async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
   const tab = await getActiveTab();
   const tabId = tab.id!;
+  const historyLines: string[] = [];
 
-  const domResponse = (await chrome.tabs.sendMessage(tabId, { type: "GET_DOM_SNAPSHOT" })) as
-    | GetDomSnapshotResponse
-    | { ok: false; error: string };
-  if (!domResponse.ok) {
-    throw new Error("Failed to read page DOM: " + (domResponse as any).error);
+  for (let step = 1; step <= MAX_STEPS; step++) {
+    if (cancelledRuns.has(runId)) {
+      cancelledRuns.delete(runId);
+      broadcast({ type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped by user." });
+      return;
+    }
+
+    const domResponse = (await chrome.tabs.sendMessage(tabId, { type: "GET_DOM_SNAPSHOT" })) as
+      | GetDomSnapshotResponse
+      | { ok: false; error: string };
+    if (!domResponse.ok) {
+      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Failed to read page DOM: " + domResponse.error });
+      return;
+    }
+
+    const screenshotDataUrl = await chrome.tabs.captureVisibleTab({ format: "png" });
+    await ensureOffscreenDocument();
+
+    // The data contract's task_goal is a single string, so step history rides along inside
+    // it rather than as a new field -- the planner already reads task_goal as free text.
+    const goalWithHistory = historyLines.length
+      ? `${taskGoal}\n\nProgress so far:\n${historyLines.join("\n")}`
+      : taskGoal;
+
+    const buildMsg: BuildContextOffscreenMessage = {
+      type: "BUILD_CONTEXT_OFFSCREEN",
+      screenshotDataUrl,
+      domSnapshot: domResponse.domSnapshot,
+      taskGoal: goalWithHistory
+    };
+    const buildResponse = (await chrome.runtime.sendMessage(buildMsg)) as BuildContextResponse | { ok: false; error: string };
+    if (!buildResponse.ok) {
+      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Failed to build sanitized context: " + buildResponse.error });
+      return;
+    }
+
+    await chrome.tabs
+      .sendMessage(tabId, { type: "SHOW_OVERLAY", manifest: buildResponse.payload.redaction_manifest })
+      .catch(() => undefined);
+
+    let action: NextActionResponse;
+    try {
+      action = await requestNextAction(buildResponse.payload);
+    } catch (err) {
+      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Planner request failed: " + String(err) });
+      return;
+    }
+
+    if (action.action === "none") {
+      broadcast({
+        type: "TASK_STEP",
+        runId,
+        step,
+        status: "Task complete.",
+        action,
+        redactionManifest: buildResponse.payload.redaction_manifest
+      });
+      broadcast({ type: "TASK_DONE", runId, reason: "completed", message: "Done." });
+      return;
+    }
+
+    // The one point where the loop is not fully autonomous: a submit/payment/delete-shaped
+    // action pauses for the user's explicit go-ahead instead of firing immediately. Routine
+    // actions (typing into a field, scrolling, clicking a non-destructive control) proceed
+    // without asking.
+    if (buildResponse.payload.risk_tier === "high_risk") {
+      const requestId = genId();
+      const approved = await new Promise<boolean>((resolve) => {
+        pendingConfirms.set(requestId, resolve);
+        broadcast({ type: "CONFIRM_REQUEST", runId, requestId, step, action, riskTier: buildResponse.payload.risk_tier });
+      });
+      pendingConfirms.delete(requestId);
+      if (!approved) {
+        broadcast({ type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped before a high-risk action (not confirmed)." });
+        return;
+      }
+    }
+
+    const execResponse = (await chrome.tabs.sendMessage(tabId, {
+      type: "EXECUTE_ACTION",
+      action: action.action,
+      target: action.target,
+      value: action.value
+    })) as ExecuteActionResponse;
+
+    const stepStatus = execResponse.ok ? "action executed" : `action failed: ${execResponse.error ?? "unknown"}`;
+    historyLines.push(
+      `step ${step}: ${action.action}${action.target.selector ? ` on ${action.target.selector}` : ""} -> ${stepStatus}`
+    );
+
+    broadcast({
+      type: "TASK_STEP",
+      runId,
+      step,
+      status: stepStatus,
+      action,
+      redactionManifest: buildResponse.payload.redaction_manifest
+    });
+
+    if (!execResponse.ok) {
+      // A failed action (stale selector, element gone after a re-render, ...) could in
+      // principle be retried, but retrying blindly risks looping on a broken step forever --
+      // stop and let the user look, rather than guess.
+      broadcast({ type: "TASK_DONE", runId, reason: "error", message: "Stopped after a failed action." });
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
   }
 
-  const screenshotDataUrl = await chrome.tabs.captureVisibleTab({ format: "png" });
-
-  await ensureOffscreenDocument();
-  const buildMsg: BuildContextOffscreenMessage = {
-    type: "BUILD_CONTEXT_OFFSCREEN",
-    screenshotDataUrl,
-    domSnapshot: domResponse.domSnapshot,
-    taskGoal
-  };
-  const buildResponse = (await chrome.runtime.sendMessage(buildMsg)) as BuildContextResponse | { ok: false; error: string };
-  if (!buildResponse.ok) {
-    throw new Error("Failed to build sanitized context: " + (buildResponse as any).error);
-  }
-
-  // Draw the redaction boxes on the real page -- visible proof, not just a console log.
-  const overlayMsg: ShowOverlayMessage = { type: "SHOW_OVERLAY", manifest: buildResponse.payload.redaction_manifest };
-  await chrome.tabs.sendMessage(tabId, overlayMsg).catch(() => undefined);
-
-  const action = await requestNextAction(buildResponse.payload);
-
-  const execResponse = (await chrome.tabs.sendMessage(tabId, {
-    type: "EXECUTE_ACTION",
-    action: action.action,
-    target: action.target,
-    value: action.value
-  })) as ExecuteActionResponse;
-
-  return {
-    status: execResponse.ok ? "action executed" : `action failed: ${execResponse.error ?? "unknown"}`,
-    action,
-    redactionManifest: buildResponse.payload.redaction_manifest
-  };
+  broadcast({ type: "TASK_DONE", runId, reason: "max_steps", message: `Stopped after ${MAX_STEPS} steps without finishing.` });
 }
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   if (message.type === "RUN_TASK") {
-    runTask(message.taskGoal)
-      .then((result) => sendResponse({ ok: true, ...result }))
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    const runId = genId();
+    sendResponse({ ok: true, runId });
+    runAgentLoop(runId, message.taskGoal).catch((err) =>
+      broadcast({ type: "TASK_DONE", runId, reason: "error", message: String(err) })
+    );
     return true;
   }
+
+  if (message.type === "CONFIRM_RESPONSE") {
+    const resolve = pendingConfirms.get(message.requestId);
+    resolve?.(message.approved);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message.type === "CANCEL_TASK") {
+    cancelledRuns.add(message.runId);
+    sendResponse({ ok: true });
+    return false;
+  }
+
   return false;
 });

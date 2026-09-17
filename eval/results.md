@@ -1,6 +1,6 @@
 # Eval Results — Privacy-Preserving Browser Agent
 
-Generated: 2026-09-16T18:14:28.322Z
+Generated: 2026-09-17T00:59:33.738Z
 Fixture: `eval/fixture.ts` (8 DOM fields: 5 must-redact, 2 control, 1 submit; 5 vision
 regions including one deliberately duplicated detection and one deliberately mislocated
 false-positive-shaped hit over a control field)
@@ -16,7 +16,7 @@ false-positive-shaped hit over a control field)
 | True negatives (control fields correctly left alone) | 2 / 2 |
 | Recall | 100.0% |
 | Precision | 100.0% |
-| Fusion latency (fuseForRedaction call, this machine) | 0.619 ms |
+| Fusion latency (fuseForRedaction call, this machine) | 0.852 ms |
 
 Notes: `#fullname` has no DOM `type` hint and is redacted purely on the vision-side
 person_name detection -- this is the one field in the fixture that actually exercises
@@ -34,6 +34,6 @@ which overrides the vision guess (see `domSafeBoxes` in fuse.ts).
 | True positive matches | 3 |
 | False negative matches | 0 |
 | False positive card matches (Luhn-invalid, must be 0) | 0 |
-| Latency (4 cases, this machine) | 0.802 ms |
+| Latency (4 cases, this machine) | 1.029 ms |
 
 Full manifest and raw numbers: `eval/benchmark_output.json`.

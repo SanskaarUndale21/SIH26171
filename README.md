@@ -37,6 +37,15 @@ comparison, and why.
    a live model call: the planner can hallucinate a value and try to type it into a field it
    was never allowed to see the contents of. The server downgrades any such `type` action to a
    harmless `click` regardless of what the model returns.
+7. **A real multi-step agent loop** (`extension/src/background/index.ts`) — not one action per
+   click. The extension observes (DOM + screenshot), redacts, asks the planner, executes,
+   folds the outcome into a short history, and observes again, until the planner says the task
+   is done, a step budget (15) is hit, an action fails, or the user cancels. A submit/payment/
+   delete-shaped (`risk_tier: "high_risk"`) action pauses and asks the user to confirm in the
+   side panel before it runs — the one point that stays human-gated on purpose.
+8. **Fully local model weights** (`extension/public/`) — BlazeFace, the NER model, YOLOv8n, and
+   Florence-2 are all downloaded and bundled into the extension at build time, not fetched
+   from a CDN on first use. Nothing about on-device perception depends on network access.
 
 Explicitly not carried over from the comparison: a trained PII classifier (real training data
 + eval is a separate project in its own right; the confidence-fusion scorer above is the
@@ -44,13 +53,24 @@ lightweight, honest version of that idea), and any Qwen or other Chinese-origin 
 
 ## Architecture
 
-- `extension/` — Manifest V3 extension. `content/` reads the DOM and executes actions on the
-  real page; `offscreen/` runs the actual ML perception (OCR, NER, face/element detection,
-  redaction) inside a `chrome.offscreen` document under the extension's own CSP, separate from
-  whatever the host page enforces (some sites, e.g. Google Docs/Forms, block Worker/
-  `importScripts` calls from a content script's context outright); `sidepanel/` is the chat UI.
+- `extension/` — Manifest V3 extension.
+  - `content/` reads the DOM, executes actions, and draws the redaction overlay on the real
+    page. Deliberately thin — no ML code runs here.
+  - `offscreen/` runs the actual ML perception (OCR, NER, face/element detection, redaction)
+    inside a `chrome.offscreen` document, under the extension's own CSP rather than whatever
+    the host page enforces (some sites, e.g. Google Docs/Forms, block the Worker/
+    `importScripts` calls the ML stack needs from inside a content script's context outright).
+  - `background/` orchestrates the agent loop described above and is the only place that
+    talks to the server.
+  - `sidepanel/` is the persistent chat UI — opens on toolbar-icon click, stays open across
+    navigation, streams each step of a run live, and is where a high-risk action's
+    confirmation prompt appears.
+  - `public/models/`, `public/yolo/`, `public/blazeface/`, `public/mediapipe-wasm/`,
+    `public/tesseract/` — the bundled model weights and runtimes (~420MB total).
 - `server/` — FastAPI. `planner.py` exposes a single swappable `get_next_action(...)`
-  interface — no other file needs to change to swap the backend model.
+  interface and is provider-agnostic (`PLANNER_BASE_URL`/`PLANNER_API_KEY` work with OpenAI,
+  Groq, OpenRouter, Together, or a local model server) — no other file needs to change to
+  swap the backend model.
 - `eval/` — bundles and runs the real redaction/PII logic against a ground-truth fixture.
 - `demo/` — a sample form fixture for manual testing.
 - `scripts/` — the dev server launcher.

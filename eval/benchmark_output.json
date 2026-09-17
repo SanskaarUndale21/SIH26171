@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T18:14:28.322Z",
+  "generatedAt": "2026-09-17T00:59:33.738Z",
   "fusion": {
     "manifestEntries": 7,
     "truePositives": 5,
@@ -8,14 +8,14 @@
     "trueNegatives": 2,
     "recall": 1,
     "precision": 1,
-    "latencyMs": 0.619
+    "latencyMs": 0.852
   },
   "regexPii": {
     "cases": 4,
     "truePositiveMatches": 3,
     "falseNegativeMatches": 0,
     "falsePositiveCardMatches": 0,
-    "latencyMs": 0.802
+    "latencyMs": 1.029
   },
   "manifest": [
     {

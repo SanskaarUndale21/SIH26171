@@ -1,4 +1,4 @@
-import type { ActionTarget, ActionType, DomSnapshot, NextActionRequest, RedactionEntry } from "./types";
+import type { ActionTarget, ActionType, DomSnapshot, NextActionRequest, NextActionResponse, RedactionEntry, RiskTier } from "./types";
 
 // Content script -> background. Deliberately the only thing the content script does besides
 // executing actions and drawing the overlay: reading the DOM is cheap and safe on any page.
@@ -23,6 +23,9 @@ export interface ShowOverlayMessage {
   manifest: RedactionEntry[];
 }
 
+// Sidepanel -> background: start a multi-step agent run. Unlike the old single-shot RUN_TASK,
+// the loop's progress streams back as separate TaskStepMessage/TaskDoneMessage broadcasts
+// (see below) rather than in the initial response, since a run can take many steps.
 export interface RunTaskMessage {
   type: "RUN_TASK";
   taskGoal: string;
@@ -36,12 +39,62 @@ export interface BuildContextOffscreenMessage {
   taskGoal: string;
 }
 
+// Background -> sidepanel (broadcast). One per completed step of the agent loop.
+export interface TaskStepMessage {
+  type: "TASK_STEP";
+  runId: string;
+  step: number;
+  status: string;
+  action?: NextActionResponse;
+  redactionManifest?: RedactionEntry[];
+}
+
+// Background -> sidepanel (broadcast). Sent once when the loop stops, for any reason.
+export interface TaskDoneMessage {
+  type: "TASK_DONE";
+  runId: string;
+  reason: "completed" | "max_steps" | "error" | "cancelled";
+  message: string;
+}
+
+// Background -> sidepanel (broadcast): a high_risk action (submit/payment/delete-shaped) is
+// about to run and the loop is paused until the user responds. This is the one point where
+// the agent does NOT act autonomously -- Atlas-style full autonomy is fine for routine
+// actions, but a submit/payment click is exactly the kind of step this project's whole
+// privacy/safety posture argues should not happen silently.
+export interface ConfirmRequestMessage {
+  type: "CONFIRM_REQUEST";
+  runId: string;
+  requestId: string;
+  step: number;
+  action: NextActionResponse;
+  riskTier: RiskTier;
+}
+
+// Sidepanel -> background: the user's answer to a ConfirmRequestMessage.
+export interface ConfirmResponseMessage {
+  type: "CONFIRM_RESPONSE";
+  requestId: string;
+  approved: boolean;
+}
+
+// Sidepanel -> background: stop an in-progress run.
+export interface CancelTaskMessage {
+  type: "CANCEL_TASK";
+  runId: string;
+}
+
 export type ExtensionMessage =
   | GetDomSnapshotMessage
   | ExecuteActionMessage
   | ShowOverlayMessage
   | RunTaskMessage
-  | BuildContextOffscreenMessage;
+  | BuildContextOffscreenMessage
+  | TaskStepMessage
+  | TaskDoneMessage
+  | ConfirmRequestMessage
+  | ConfirmResponseMessage
+  | CancelTaskMessage;
 
 export interface GetDomSnapshotResponse {
   ok: true;
