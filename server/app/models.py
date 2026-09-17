@@ -11,10 +11,18 @@ class RedactionEntry(BaseModel):
     method: Literal["blackbox", "token"]
 
 
+class InteractiveElementSummary(BaseModel):
+    selector: str
+    tag: str
+    label: str | None
+    isSubmit: bool
+
+
 class StructuredSummary(BaseModel):
     fields: int
     submit_button: str | None
     detected_via: Literal["dom", "vision"]
+    interactive_elements: list[InteractiveElementSummary] = []
 
 
 class NextActionRequest(BaseModel):

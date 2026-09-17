@@ -17,10 +17,22 @@ export interface RedactionEntry {
   method: RedactionMethod;
 }
 
+// A non-sensitive structural pointer to a real, clickable/fillable element -- the tag, a
+// label (button text/placeholder, never a field's value), and the exact CSS selector to
+// target it by. This is what actually lets the planner target real elements instead of
+// guessing a plausible-looking selector that matches nothing on the page.
+export interface InteractiveElementSummary {
+  selector: string;
+  tag: string;
+  label: string | null;
+  isSubmit: boolean;
+}
+
 export interface StructuredSummary {
   fields: number;
   submit_button: string | null;
   detected_via: "dom" | "vision";
+  interactive_elements: InteractiveElementSummary[];
 }
 
 export type RiskTier = "routine" | "high_risk";
