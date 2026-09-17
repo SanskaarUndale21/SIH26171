@@ -151,6 +151,14 @@
         padding: 2px 4px;
       }
       #voiceToggle.off { text-decoration: line-through; opacity: 0.5; }
+      #clearVault {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 13px;
+        color: #6b7280;
+        padding: 2px 4px;
+      }
       header { display: flex; align-items: flex-start; justify-content: space-between; }
       header .title-block { flex: 1; }
     </style>
@@ -162,6 +170,7 @@
         <p>PII is redacted on-device before anything is sent</p>
       </div>
       <button id="voiceToggle" title="Toggle spoken responses">&#128266; voice</button>
+      <button id="clearVault" title="Forget saved form answers (name, company, etc.)">&#128465;</button>
     </header>
     <div id="messages"></div>
     <div id="composer">

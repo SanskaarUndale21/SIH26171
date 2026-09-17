@@ -5,8 +5,9 @@ import type {
   ExtensionMessage,
   GetDomSnapshotResponse
 } from "../messages";
-import type { NextActionResponse, RedactionEntry } from "../types";
+import type { NextActionResponse, RedactionEntry, StructuredSummary } from "../types";
 import { requestNextAction } from "./server";
+import { getVaultAnswer, saveVaultAnswer } from "../privacy/vault";
 
 const OFFSCREEN_URL = "offscreen.html";
 const MAX_STEPS = 15;
@@ -118,6 +119,15 @@ function unfilledSensitiveTypes(manifest: RedactionEntry[]): string[] {
   return [...new Set(manifest.map((entry) => entry.type).filter((type) => piiTypes.has(type)))];
 }
 
+// The vault (privacy/vault.ts) keys saved answers by the field's real label ("Company Name"),
+// not by the question text the planner happened to phrase -- interactive_elements is the same
+// list the planner uses to get real selectors, so this is just looking the same element back
+// up by the selector the planner already gave us.
+function labelForSelector(selector: string | null, summary: StructuredSummary): string | null {
+  if (!selector) return null;
+  return summary.interactive_elements.find((el) => el.selector === selector)?.label ?? null;
+}
+
 async function ensureOffscreenDocument(): Promise<void> {
   const existing = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]
@@ -212,8 +222,36 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     // path -- it never goes back to the server. Only a generic status ("filled" / "skipped")
     // is folded into history, so the planner can move on without ever learning the value.
     if (action.action === "ask_user") {
-      const requestId = genId();
       const question = action.question?.trim() || "What value should I use here?";
+      const fieldLabel = labelForSelector(action.target.selector, buildResponse.payload.structured_summary);
+
+      // Answered this exact field before (by label, on any page)? Fill it straight away
+      // instead of asking again -- still entirely local, still never sent to the planner.
+      const savedAnswer = fieldLabel ? await getVaultAnswer(fieldLabel) : null;
+      if (savedAnswer) {
+        const execResponse = (await chrome.tabs.sendMessage(tabId, {
+          type: "EXECUTE_ACTION",
+          action: "type",
+          target: action.target,
+          value: savedAnswer
+        })) as ExecuteActionResponse;
+        const stepStatus = execResponse.ok
+          ? `auto-filled "${fieldLabel}" from a saved answer (value not shared with the planner)`
+          : `tried to auto-fill "${fieldLabel}" from a saved answer but failed: ${execResponse.error ?? "unknown"}`;
+        historyLines.push(`step ${step}: ask_user ("${question}") -> ${stepStatus}`);
+        broadcastAll(tabId, {
+          type: "TASK_STEP",
+          runId,
+          step,
+          status: stepStatus,
+          action,
+          redactionManifest: buildResponse.payload.redaction_manifest
+        });
+        await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
+        continue;
+      }
+
+      const requestId = genId();
       const answer = await new Promise<string | null>((resolve) => {
         pendingAskUser.set(requestId, resolve);
         broadcastAll(tabId, { type: "ASK_USER_REQUEST", runId, requestId, step, question });
@@ -228,8 +266,13 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
           target: action.target,
           value: answer
         })) as ExecuteActionResponse;
+        if (execResponse.ok && fieldLabel) {
+          await saveVaultAnswer(fieldLabel, answer.trim());
+        }
         stepStatus = execResponse.ok
-          ? "asked the user and filled the field with their answer (value not shared with the planner)"
+          ? fieldLabel
+            ? "asked the user and filled the field with their answer (saved locally for next time; value not shared with the planner)"
+            : "asked the user and filled the field with their answer (value not shared with the planner)"
           : `asked the user but failed to fill the field: ${execResponse.error ?? "unknown"}`;
       } else {
         stepStatus = "asked the user; they chose not to answer, field left as-is";

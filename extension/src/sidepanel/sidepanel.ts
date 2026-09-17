@@ -1,11 +1,13 @@
 import type { NextActionResponse, RedactionEntry, RiskTier } from "../types";
 import type { ExtensionMessage } from "../messages";
+import { clearVault } from "../privacy/vault";
 
 const messagesEl = document.getElementById("messages") as HTMLDivElement;
 const goalInput = document.getElementById("goal") as HTMLTextAreaElement;
 const sendButton = document.getElementById("send") as HTMLButtonElement;
 const micButton = document.getElementById("mic") as HTMLButtonElement;
 const voiceToggle = document.getElementById("voiceToggle") as HTMLButtonElement;
+const clearVaultButton = document.getElementById("clearVault") as HTMLButtonElement;
 
 let activeRunId: string | null = null;
 let activeThinkingEl: HTMLDivElement | null = null;
@@ -373,6 +375,11 @@ voiceToggle.addEventListener("click", () => {
   voiceEnabled = !voiceEnabled;
   voiceToggle.classList.toggle("off", !voiceEnabled);
   if (!voiceEnabled) window.speechSynthesis?.cancel();
+});
+
+clearVaultButton.addEventListener("click", async () => {
+  await clearVault();
+  addMessage("system", "Forgot all saved form answers -- it'll ask again next time.");
 });
 
 sendButton.addEventListener("click", () => {
