@@ -65,6 +65,31 @@ function waitForTabLoad(tabId: number, timeoutMs = 10000): Promise<void> {
 // high-risk regardless of what's actually being done, including something unrelated like
 // "open a new tab". The confirmation gate needs to ask "is THIS step a submit/payment/
 // destructive click", not "does this page contain one somewhere".
+// Real bug hit live: the planner returned open_tab with value "Contact form owner" -- not a
+// URL. chrome.tabs.create({url: "Contact form owner"}) doesn't reject that; Chrome silently
+// resolves it as a path relative to THIS extension's own origin
+// (chrome-extension://<id>/Contact%20form%20owner), which obviously doesn't exist
+// (ERR_FILE_NOT_FOUND) -- and since that's an extension page, not a normal site, our own
+// content script never gets injected into it either, so the *next* step then fails with
+// "Could not establish connection" too. One bad value, two confusing symptoms. Validate
+// before ever handing a value to chrome.tabs.create/update instead of trusting it blindly.
+function resolveNavigationUrl(raw: string | null): { url: string | undefined } | { error: string } {
+  if (!raw || !raw.trim()) return { url: undefined }; // open_tab with no value -> blank new tab
+  const trimmed = raw.trim();
+
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    // Already has a scheme (http://, https://, chrome://, ...) -- trust it as-is.
+    return { url: trimmed };
+  }
+  // A bare domain-shaped string ("example.com", "www.foo.org/path") is a reasonable thing
+  // for a model to return without a scheme -- assume https. Anything else (spaces, no dot,
+  // "Contact form owner") is not a URL at all and must not be passed to chrome.tabs.
+  if (/^[\w-]+(\.[a-z]{2,})+([/?#].*)?$/i.test(trimmed)) {
+    return { url: `https://${trimmed}` };
+  }
+  return { error: `not a valid URL: "${raw}"` };
+}
+
 function isHighRiskAction(action: NextActionResponse): boolean {
   if (action.action !== "click") return false;
   const haystack = (action.target.selector ?? "").toLowerCase();
@@ -182,22 +207,34 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     let execError: string | undefined;
 
     if (action.action === "open_tab") {
-      try {
-        const newTab = await chrome.tabs.create({ url: action.value || undefined });
-        if (!newTab.id) throw new Error("new tab has no id");
-        tabId = newTab.id;
-        await waitForTabLoad(tabId);
-      } catch (err) {
+      const resolved = resolveNavigationUrl(action.value);
+      if ("error" in resolved) {
         execOk = false;
-        execError = String(err);
+        execError = resolved.error;
+      } else {
+        try {
+          const newTab = await chrome.tabs.create({ url: resolved.url });
+          if (!newTab.id) throw new Error("new tab has no id");
+          tabId = newTab.id;
+          await waitForTabLoad(tabId);
+        } catch (err) {
+          execOk = false;
+          execError = String(err);
+        }
       }
     } else if (action.action === "navigate") {
-      try {
-        await chrome.tabs.update(tabId, { url: action.value ?? undefined });
-        await waitForTabLoad(tabId);
-      } catch (err) {
+      const resolved = resolveNavigationUrl(action.value);
+      if ("error" in resolved || !resolved.url) {
         execOk = false;
-        execError = String(err);
+        execError = "error" in resolved ? resolved.error : "navigate requires a URL";
+      } else {
+        try {
+          await chrome.tabs.update(tabId, { url: resolved.url });
+          await waitForTabLoad(tabId);
+        } catch (err) {
+          execOk = false;
+          execError = String(err);
+        }
       }
     } else {
       const execResponse = (await chrome.tabs.sendMessage(tabId, {

@@ -64,7 +64,11 @@ SYSTEM_PROMPT = (
     "the current tab must stay open). For both, `target` is not applicable -- return "
     "{\"selector\": null, \"bbox\": [0,0,0,0], \"confidence\": 1}. Only navigate/open_tab to a "
     "URL the task goal or visible page content actually names or links to -- never guess a "
-    "URL that appears nowhere in the given context.\n\n"
+    "URL that appears nowhere in the given context. `value` for these two actions MUST be "
+    "an actual URL (e.g. \"https://example.com\") or a bare domain (\"example.com\"), never a "
+    "description, label, or link text (e.g. \"Contact form owner\" is not a URL even if that "
+    "text appears on the page) -- if you don't have a real URL, use `value: null` to open a "
+    "blank tab instead of guessing one.\n\n"
     "Respond with exactly one action.\n\n"
     "Respond with ONLY a JSON object of this exact shape, no other text:\n"
     '{"action": "click|type|scroll|navigate|open_tab|none", '
