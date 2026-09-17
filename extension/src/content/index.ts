@@ -43,7 +43,12 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   // background additionally targets this tab directly (chrome.tabs.sendMessage) with the
   // same payloads so the pill's compact popup can show live status without needing the side
   // panel open at all.
-  if (message.type === "TASK_STEP" || message.type === "TASK_DONE" || message.type === "CONFIRM_REQUEST") {
+  if (
+    message.type === "TASK_STEP" ||
+    message.type === "TASK_DONE" ||
+    message.type === "CONFIRM_REQUEST" ||
+    message.type === "ASK_USER_REQUEST"
+  ) {
     handlePillMessage(message);
     return false;
   }

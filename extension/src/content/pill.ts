@@ -109,6 +109,58 @@ function showConfirm(
   confirmRow.appendChild(row);
 }
 
+// A field the planner has no value for (e.g. a name or a free-text reason) -- asked directly
+// here rather than guessed. The typed answer goes straight to background -> EXECUTE_ACTION;
+// it is never sent to the server (see background/index.ts's ask_user branch).
+function showAskUser(requestId: string, question: string): void {
+  if (!confirmRow || !root) return;
+  pendingConfirmRequestId = requestId;
+  confirmRow.innerHTML = "";
+  confirmRow.style.display = "flex";
+  confirmRow.style.flexDirection = "column";
+
+  const label = document.createElement("div");
+  label.textContent = question;
+  label.style.cssText = "font-size:11px;color:#e5e7eb;margin-bottom:4px;";
+  confirmRow.appendChild(label);
+
+  const answerInput = document.createElement("input");
+  answerInput.type = "text";
+  answerInput.placeholder = "Type your answer...";
+  answerInput.style.cssText =
+    "border-radius:8px;border:1px solid #374151;background:#1f2937;color:#f3f4f6;font-size:12px;padding:6px;margin-bottom:6px;font-family:inherit;";
+
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:6px;";
+  const sendAnswerBtn = document.createElement("button");
+  sendAnswerBtn.textContent = "Fill it in";
+  sendAnswerBtn.style.cssText = "flex:1;padding:4px;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;font-size:11px;";
+  const skipBtn = document.createElement("button");
+  skipBtn.textContent = "Skip";
+  skipBtn.style.cssText = "flex:1;padding:4px;border:1px solid #4b5563;border-radius:6px;background:transparent;color:#e5e7eb;cursor:pointer;font-size:11px;";
+
+  const respond = (answer: string | null) => {
+    chrome.runtime.sendMessage({ type: "ASK_USER_RESPONSE", requestId, answer });
+    confirmRow!.style.display = "none";
+    confirmRow!.style.flexDirection = "";
+    pendingConfirmRequestId = null;
+  };
+  sendAnswerBtn.addEventListener("click", () => respond(answerInput.value.trim() || null));
+  answerInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      respond(answerInput.value.trim() || null);
+    }
+  });
+  skipBtn.addEventListener("click", () => respond(null));
+
+  row.appendChild(sendAnswerBtn);
+  row.appendChild(skipBtn);
+  confirmRow.appendChild(answerInput);
+  confirmRow.appendChild(row);
+  answerInput.focus();
+}
+
 function runTask(): void {
   if (!inputEl || activeRunId) return;
   const taskGoal = inputEl.value.trim();
@@ -149,6 +201,7 @@ export function handlePillMessage(message: {
   riskTier?: RiskTier;
   redactionManifest?: RedactionEntry[];
   unfilledSensitiveTypes?: string[];
+  question?: string;
 }): void {
   if (message.type === "TASK_STEP" && message.runId === activeRunId) {
     setStatus(`Step ${(message as any).step}: ${message.status}`);
@@ -157,6 +210,8 @@ export function handlePillMessage(message: {
     setStatus(message.message ?? "Done.", message.message?.toLowerCase().includes("error"));
   } else if (message.type === "CONFIRM_REQUEST" && message.runId === activeRunId && message.action && message.riskTier) {
     showConfirm(message.requestId!, message.action, message.riskTier, message.unfilledSensitiveTypes ?? []);
+  } else if (message.type === "ASK_USER_REQUEST" && message.runId === activeRunId && message.question) {
+    showAskUser(message.requestId!, message.question);
   }
 }
 

@@ -10,6 +10,7 @@ const voiceToggle = document.getElementById("voiceToggle") as HTMLButtonElement;
 let activeRunId: string | null = null;
 let activeThinkingEl: HTMLDivElement | null = null;
 let pendingConfirmRespond: ((approved: boolean) => void) | null = null;
+let pendingAskUserRespond: ((answer: string | null) => void) | null = null;
 let voiceEnabled = true;
 
 function scrollToBottom(): void {
@@ -130,6 +131,64 @@ function addConfirmPrompt(
   scrollToBottom();
 }
 
+// A field the planner has no value for -- asked directly instead of guessed. The typed
+// answer goes straight to background -> EXECUTE_ACTION and is never sent to the server (see
+// background/index.ts's ask_user branch); the chat log only ever shows the question, not
+// anything about what gets typed back.
+function addAskUserPrompt(requestId: string, question: string): void {
+  const el = document.createElement("div");
+  el.className = "msg agent";
+  const label = document.createElement("div");
+  label.textContent = question;
+  speak(question);
+  el.appendChild(label);
+
+  const input = document.createElement("textarea");
+  input.placeholder = "Type your answer... (never sent to the server)";
+  input.style.cssText = "width:100%;margin-top:6px;height:36px;resize:none;border-radius:8px;border:1px solid #d1d5db;padding:6px;font-size:12px;font-family:inherit;";
+
+  const row = document.createElement("div");
+  row.style.display = "flex";
+  row.style.gap = "6px";
+  row.style.marginTop = "6px";
+
+  const respond = (answer: string | null) => {
+    chrome.runtime.sendMessage({ type: "ASK_USER_RESPONSE", requestId, answer });
+    fillBtn.disabled = true;
+    skipBtn.disabled = true;
+    input.disabled = true;
+    label.textContent += answer ? " (answered)" : " (skipped)";
+    row.remove();
+    if (pendingAskUserRespond === respond) pendingAskUserRespond = null;
+  };
+  pendingAskUserRespond = respond;
+
+  const fillBtn = document.createElement("button");
+  fillBtn.textContent = "Fill it in";
+  fillBtn.style.cssText = "flex:1;padding:6px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;";
+  fillBtn.addEventListener("click", () => respond(input.value.trim() || null));
+
+  const skipBtn = document.createElement("button");
+  skipBtn.textContent = "Skip";
+  skipBtn.style.cssText = "flex:1;padding:6px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;";
+  skipBtn.addEventListener("click", () => respond(null));
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      respond(input.value.trim() || null);
+    }
+  });
+
+  row.appendChild(fillBtn);
+  row.appendChild(skipBtn);
+  el.appendChild(input);
+  el.appendChild(row);
+  messagesEl.appendChild(el);
+  input.focus();
+  scrollToBottom();
+}
+
 function autoGrow(): void {
   goalInput.style.height = "auto";
   goalInput.style.height = `${Math.min(goalInput.scrollHeight, 90)}px`;
@@ -188,6 +247,14 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
     addConfirmPrompt(message.requestId, message.action, message.riskTier, message.unfilledSensitiveTypes);
     return;
   }
+
+  if (message.type === "ASK_USER_REQUEST") {
+    if (message.runId !== activeRunId) return;
+    activeThinkingEl?.remove();
+    activeThinkingEl = null;
+    addAskUserPrompt(message.requestId, message.question);
+    return;
+  }
 });
 
 // Voice input. SpeechRecognition is Chrome's built-in speech-to-text -- no new dependency --
@@ -244,6 +311,13 @@ function startListening(): void {
 
     if (!finalTranscript) return;
     const lower = finalTranscript.toLowerCase();
+
+    if (pendingAskUserRespond) {
+      // Free-text answer, not a yes/no -- whatever was said is the value to fill in.
+      pendingAskUserRespond(finalTranscript.trim() || null);
+      goalInput.value = "";
+      return;
+    }
 
     if (pendingConfirmRespond) {
       if (/\b(yes|confirm|go ahead|do it|proceed)\b/.test(lower)) {

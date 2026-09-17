@@ -56,13 +56,16 @@ export interface ActionTarget {
   confidence: number;
 }
 
-export type ActionType = "click" | "type" | "scroll" | "navigate" | "open_tab" | "none";
+export type ActionType = "click" | "type" | "scroll" | "navigate" | "open_tab" | "none" | "ask_user";
 
 export interface NextActionResponse {
   action: ActionType;
   target: ActionTarget;
   value: string | null;
   verified: boolean;
+  // Only set when action="ask_user": the question to put to the person. The extension asks it
+  // directly and types the answer in itself -- the answer is never sent to the server.
+  question?: string | null;
 }
 
 export interface DomFieldInfo {

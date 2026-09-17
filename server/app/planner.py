@@ -13,7 +13,7 @@ RESPONSE_SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["click", "type", "scroll", "navigate", "open_tab", "none"]},
+            "action": {"type": "string", "enum": ["click", "type", "scroll", "navigate", "open_tab", "none", "ask_user"]},
             "target": {
                 "type": "object",
                 "properties": {
@@ -30,8 +30,9 @@ RESPONSE_SCHEMA = {
                 "additionalProperties": False,
             },
             "value": {"type": ["string", "null"]},
+            "question": {"type": ["string", "null"]},
         },
-        "required": ["action", "target", "value"],
+        "required": ["action", "target", "value", "question"],
         "additionalProperties": False,
     },
     "strict": True,
@@ -74,11 +75,22 @@ SYSTEM_PROMPT = (
     "description, label, or link text (e.g. \"Contact form owner\" is not a URL even if that "
     "text appears on the page) -- if you don't have a real URL, use `value: null` to open a "
     "blank tab instead of guessing one.\n\n"
+    "You will often meet a fillable field where the task goal simply doesn't say what value "
+    "belongs there (a name, a company, a date, a free-text reason, a dropdown choice you can't "
+    "infer) -- and it is NOT redacted, so it isn't covered by the redacted-region rule above. "
+    "Never invent a plausible-looking value for a field like this. Instead return "
+    "action=\"ask_user\" with target.selector copied verbatim from interactive_elements (or "
+    "null if you only have a bbox), and `question` set to a short, specific question naming "
+    "the field (e.g. \"What should I put in the 'Company Name' field?\"). The person answers "
+    "directly in their browser and the extension types it in itself -- you will never see the "
+    "answer, only a note in the next step's history that the field was filled. Ask about one "
+    "field at a time, and only when you actually cannot determine the value from the task goal "
+    "or the visible page content.\n\n"
     "Respond with exactly one action.\n\n"
     "Respond with ONLY a JSON object of this exact shape, no other text:\n"
-    '{"action": "click|type|scroll|navigate|open_tab|none", '
+    '{"action": "click|type|scroll|navigate|open_tab|none|ask_user", '
     '"target": {"selector": string|null, "bbox": [number,number,number,number], "confidence": number}, '
-    '"value": string|null}'
+    '"value": string|null, "question": string|null}'
 )
 
 
@@ -171,5 +183,6 @@ def get_next_action(
         target=ActionTarget(**parsed["target"]),
         value=parsed.get("value"),
         verified=False,
+        question=parsed.get("question"),
     )
     return enforce_redaction_safety(action, manifest)

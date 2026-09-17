@@ -84,6 +84,27 @@ export interface ConfirmResponseMessage {
   approved: boolean;
 }
 
+// Background -> sidepanel/pill (broadcast): the planner hit a fillable field it has no value
+// for (not redacted, just genuinely unknown -- a name, a company, a free-text reason) and is
+// asking the person directly instead of guessing. Answering this never involves the server:
+// the extension types the answer straight into the page itself (see ASK_USER_RESPONSE).
+export interface AskUserRequestMessage {
+  type: "ASK_USER_REQUEST";
+  runId: string;
+  requestId: string;
+  step: number;
+  question: string;
+}
+
+// Sidepanel/pill -> background: the person's answer, or null if they chose to skip the field.
+// This value is used ONLY locally to execute a "type" action -- it is never forwarded to the
+// planner/server, by design.
+export interface AskUserResponseMessage {
+  type: "ASK_USER_RESPONSE";
+  requestId: string;
+  answer: string | null;
+}
+
 // Sidepanel -> background: stop an in-progress run.
 export interface CancelTaskMessage {
   type: "CANCEL_TASK";
@@ -108,6 +129,8 @@ export type ExtensionMessage =
   | TaskDoneMessage
   | ConfirmRequestMessage
   | ConfirmResponseMessage
+  | AskUserRequestMessage
+  | AskUserResponseMessage
   | CancelTaskMessage
   | OpenSidePanelMessage;
 

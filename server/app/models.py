@@ -41,7 +41,11 @@ class ActionTarget(BaseModel):
 
 
 class NextActionResponse(BaseModel):
-    action: Literal["click", "type", "scroll", "navigate", "open_tab", "none"]
+    action: Literal["click", "type", "scroll", "navigate", "open_tab", "none", "ask_user"]
     target: ActionTarget
     value: str | None = None
     verified: bool = False
+    # Only set when action="ask_user": the question to put to the person directly. The answer
+    # is typed into the page by the extension itself and never sent back to this server -- this
+    # field just carries what to ask, not anything about what gets filled in.
+    question: str | None = None

@@ -133,6 +133,7 @@ async function ensureOffscreenDocument(): Promise<void> {
 
 const cancelledRuns = new Set<string>();
 const pendingConfirms = new Map<string, (approved: boolean) => void>();
+const pendingAskUser = new Map<string, (answer: string | null) => void>();
 
 // The actual agent loop: observe (DOM + screenshot) -> redact+plan -> act -> observe again,
 // until the planner says "none" (done), a step budget is hit, an action fails, or the user
@@ -203,6 +204,48 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       });
       broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "completed", message: "Done." });
       return;
+    }
+
+    // A field the planner has no value for (not redacted -- just genuinely unknown, e.g. a
+    // name or a free-text reason) is never guessed. Instead the person is asked directly, and
+    // the answer is used to fill the field HERE, client-side, via the normal EXECUTE_ACTION
+    // path -- it never goes back to the server. Only a generic status ("filled" / "skipped")
+    // is folded into history, so the planner can move on without ever learning the value.
+    if (action.action === "ask_user") {
+      const requestId = genId();
+      const question = action.question?.trim() || "What value should I use here?";
+      const answer = await new Promise<string | null>((resolve) => {
+        pendingAskUser.set(requestId, resolve);
+        broadcastAll(tabId, { type: "ASK_USER_REQUEST", runId, requestId, step, question });
+      });
+      pendingAskUser.delete(requestId);
+
+      let stepStatus: string;
+      if (answer && answer.trim()) {
+        const execResponse = (await chrome.tabs.sendMessage(tabId, {
+          type: "EXECUTE_ACTION",
+          action: "type",
+          target: action.target,
+          value: answer
+        })) as ExecuteActionResponse;
+        stepStatus = execResponse.ok
+          ? "asked the user and filled the field with their answer (value not shared with the planner)"
+          : `asked the user but failed to fill the field: ${execResponse.error ?? "unknown"}`;
+      } else {
+        stepStatus = "asked the user; they chose not to answer, field left as-is";
+      }
+
+      historyLines.push(`step ${step}: ask_user ("${question}") -> ${stepStatus}`);
+      broadcastAll(tabId, {
+        type: "TASK_STEP",
+        runId,
+        step,
+        status: stepStatus,
+        action,
+        redactionManifest: buildResponse.payload.redaction_manifest
+      });
+      await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
+      continue;
     }
 
     // The one point where the loop is not fully autonomous: a submit/payment/delete-shaped
@@ -330,6 +373,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
   if (message.type === "CONFIRM_RESPONSE") {
     const resolve = pendingConfirms.get(message.requestId);
     resolve?.(message.approved);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message.type === "ASK_USER_RESPONSE") {
+    const resolve = pendingAskUser.get(message.requestId);
+    resolve?.(message.answer);
     sendResponse({ ok: true });
     return false;
   }
