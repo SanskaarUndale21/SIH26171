@@ -39,7 +39,7 @@ export interface ActionTarget {
   confidence: number;
 }
 
-export type ActionType = "click" | "type" | "scroll" | "none";
+export type ActionType = "click" | "type" | "scroll" | "navigate" | "open_tab" | "none";
 
 export interface NextActionResponse {
   action: ActionType;

@@ -13,7 +13,7 @@ RESPONSE_SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["click", "type", "scroll", "none"]},
+            "action": {"type": "string", "enum": ["click", "type", "scroll", "navigate", "open_tab", "none"]},
             "target": {
                 "type": "object",
                 "properties": {
@@ -49,9 +49,18 @@ SYSTEM_PROMPT = (
     "inside a redacted region -- you cannot see what belongs there, and typing a guessed or "
     "invented value risks overwriting real data. If a redacted field needs a value, either "
     "target it by DOM selector (never invent one) or return action=\"click\" to focus it "
-    "and leave the value to the user. Respond with exactly one action.\n\n"
+    "and leave the value to the user.\n\n"
+    "Two actions manage tabs/navigation rather than clicking within the current page: "
+    "action=\"navigate\" changes the current tab to the URL given in `value` (use for "
+    "'go to <url/site>' when you should reuse the current tab); action=\"open_tab\" opens a "
+    "new tab at the URL in `value` (use only when the task explicitly asks for a new tab, or "
+    "the current tab must stay open). For both, `target` is not applicable -- return "
+    "{\"selector\": null, \"bbox\": [0,0,0,0], \"confidence\": 1}. Only navigate/open_tab to a "
+    "URL the task goal or visible page content actually names or links to -- never guess a "
+    "URL that appears nowhere in the given context.\n\n"
+    "Respond with exactly one action.\n\n"
     "Respond with ONLY a JSON object of this exact shape, no other text:\n"
-    '{"action": "click|type|scroll|none", '
+    '{"action": "click|type|scroll|navigate|open_tab|none", '
     '"target": {"selector": string|null, "bbox": [number,number,number,number], "confidence": number}, '
     '"value": string|null}'
 )

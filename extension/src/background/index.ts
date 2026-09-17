@@ -34,6 +34,30 @@ async function getActiveTab(): Promise<chrome.tabs.Tab> {
   return tab;
 }
 
+// Waits for a tab to finish loading after we navigate it or open a new one -- without this,
+// the next loop iteration's DOM/screenshot observation would race the page's own load and see
+// a blank/loading document instead of real content.
+function waitForTabLoad(tabId: number, timeoutMs = 10000): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    };
+    const listener = (updatedTabId: number, info: chrome.tabs.TabChangeInfo) => {
+      if (updatedTabId === tabId && info.status === "complete") finish();
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.get(tabId, (t) => {
+      if (chrome.runtime.lastError) return finish(); // tab closed/gone
+      if (t?.status === "complete") finish();
+    });
+    setTimeout(finish, timeoutMs);
+  });
+}
+
 async function ensureOffscreenDocument(): Promise<void> {
   const existing = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]
@@ -57,7 +81,7 @@ const pendingConfirms = new Map<string, (approved: boolean) => void>();
 // planner knows what it already tried.
 async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
   const tab = await getActiveTab();
-  const tabId = tab.id!;
+  let tabId = tab.id!;
   const historyLines: string[] = [];
 
   for (let step = 1; step <= MAX_STEPS; step++) {
@@ -138,14 +162,42 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       }
     }
 
-    const execResponse = (await chrome.tabs.sendMessage(tabId, {
-      type: "EXECUTE_ACTION",
-      action: action.action,
-      target: action.target,
-      value: action.value
-    })) as ExecuteActionResponse;
+    // navigate/open_tab are handled here directly via chrome.tabs rather than routed to the
+    // content script -- a content script has no way to open a new browser tab, and updating
+    // the tab's own location.href from inside it races the extension's own navigation intent.
+    let execOk = true;
+    let execError: string | undefined;
 
-    const stepStatus = execResponse.ok ? "action executed" : `action failed: ${execResponse.error ?? "unknown"}`;
+    if (action.action === "open_tab") {
+      try {
+        const newTab = await chrome.tabs.create({ url: action.value || undefined });
+        if (!newTab.id) throw new Error("new tab has no id");
+        tabId = newTab.id;
+        await waitForTabLoad(tabId);
+      } catch (err) {
+        execOk = false;
+        execError = String(err);
+      }
+    } else if (action.action === "navigate") {
+      try {
+        await chrome.tabs.update(tabId, { url: action.value ?? undefined });
+        await waitForTabLoad(tabId);
+      } catch (err) {
+        execOk = false;
+        execError = String(err);
+      }
+    } else {
+      const execResponse = (await chrome.tabs.sendMessage(tabId, {
+        type: "EXECUTE_ACTION",
+        action: action.action,
+        target: action.target,
+        value: action.value
+      })) as ExecuteActionResponse;
+      execOk = execResponse.ok;
+      execError = execResponse.error;
+    }
+
+    const stepStatus = execOk ? "action executed" : `action failed: ${execError ?? "unknown"}`;
     historyLines.push(
       `step ${step}: ${action.action}${action.target.selector ? ` on ${action.target.selector}` : ""} -> ${stepStatus}`
     );
@@ -159,7 +211,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       redactionManifest: buildResponse.payload.redaction_manifest
     });
 
-    if (!execResponse.ok) {
+    if (!execOk) {
       // A failed action (stale selector, element gone after a re-render, ...) could in
       // principle be retried, but retrying blindly risks looping on a broken step forever --
       // stop and let the user look, rather than guess.

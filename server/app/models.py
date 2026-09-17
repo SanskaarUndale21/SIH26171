@@ -32,7 +32,7 @@ class ActionTarget(BaseModel):
 
 
 class NextActionResponse(BaseModel):
-    action: Literal["click", "type", "scroll", "none"]
+    action: Literal["click", "type", "scroll", "navigate", "open_tab", "none"]
     target: ActionTarget
     value: str | None = None
     verified: bool = False
