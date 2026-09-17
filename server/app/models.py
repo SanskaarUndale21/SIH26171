@@ -16,6 +16,7 @@ class InteractiveElementSummary(BaseModel):
     tag: str
     label: str | None
     isSubmit: bool
+    options: list[str] | None = None
 
 
 class StructuredSummary(BaseModel):

@@ -13,7 +13,8 @@ function toInteractiveElement(field: DomFieldInfo): InteractiveElementSummary {
     selector: field.selector,
     tag: field.tag,
     label: field.placeholder ?? field.name ?? null,
-    isSubmit: field.isSubmit
+    isSubmit: field.isSubmit,
+    options: field.options
   };
 }
 

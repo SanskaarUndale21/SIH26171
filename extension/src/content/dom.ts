@@ -35,18 +35,22 @@ function looksLikeCardField(el: HTMLElement): boolean {
 export function captureDomSnapshot(): DomSnapshot {
   const fields: DomFieldInfo[] = [];
 
-  const inputs = document.querySelectorAll<HTMLInputElement>("input, textarea, select");
+  const inputs = document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, textarea, select");
   for (const el of Array.from(inputs)) {
     if (el.offsetParent === null) continue; // skip hidden fields
     const inputType = el instanceof HTMLInputElement ? el.type : "text";
     fields.push({
       selector: cssSelectorFor(el),
       tag: el.tagName.toLowerCase(),
-      inputType: SENSITIVE_INPUT_TYPES.has(inputType) || looksLikeCardField(el) ? inputType : inputType,
+      inputType: SENSITIVE_INPUT_TYPES.has(inputType) || looksLikeCardField(el as HTMLElement) ? inputType : inputType,
       name: el.getAttribute("name"),
       placeholder: el.getAttribute("placeholder"),
       isSubmit: false,
-      bbox: toBBox(el)
+      bbox: toBBox(el),
+      options:
+        el instanceof HTMLSelectElement
+          ? Array.from(el.options).map((o) => o.textContent?.trim() || o.value)
+          : undefined
     });
   }
 

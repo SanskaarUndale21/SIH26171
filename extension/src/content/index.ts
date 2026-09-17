@@ -31,8 +31,8 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   if (message.type === "EXECUTE_ACTION") {
     try {
       clearRedactionOverlay();
-      const success = executeAction(message.action, message.target, message.value);
-      sendResponse({ ok: success } satisfies ExecuteActionResponse);
+      const result = executeAction(message.action, message.target, message.value);
+      sendResponse(result satisfies ExecuteActionResponse);
     } catch (err) {
       sendResponse({ ok: false, error: String(err) } satisfies ExecuteActionResponse);
     }

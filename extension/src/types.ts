@@ -26,6 +26,11 @@ export interface InteractiveElementSummary {
   tag: string;
   label: string | null;
   isSubmit: boolean;
+  // Only present for a <select>: its options' visible text, e.g. ["Blue", "Red", "Green"].
+  // Without this the planner has to guess a value purely from the screenshot -- it guessed
+  // right once by luck (the option was visibly readable) but there's nothing forcing that;
+  // an exact options list is what actually makes action="type" on a dropdown reliable.
+  options?: string[];
 }
 
 export interface StructuredSummary {
@@ -68,6 +73,7 @@ export interface DomFieldInfo {
   placeholder: string | null;
   isSubmit: boolean;
   bbox: BBox; // in viewport CSS pixel space, will be scaled to screenshot space
+  options?: string[]; // <select> only: visible text of each <option>
 }
 
 export interface DomSnapshot {
