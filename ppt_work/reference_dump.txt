@@ -1,0 +1,126 @@
+--- slide 1 ---
+ GROUP (6) object 2 pos=5656770,851535 size=6048375,5155565 | 
+ PLACEHOLDER (14) object 5 pos=1375917,179959 size=8083550,635000 | SMART INDIA HACKATHON 2026
+ TEXT_BOX (17) object 6 pos=566114,825500 size=9568485,4863511 | Aegis  | AI-Powered Infrastructure Project Early Warning System |  | Problem Statement ID – 26103 | 
+ PICTURE (13) object 7 pos=9780143,1536 size=2249804,1062342 | 
+--- slide 2 ---
+ PICTURE (13) object 2 pos=4266,6231732 size=12191745,626268 | 
+ GROUP (6) object 134 pos=200025,30944 size=11992355,1010969 | 
+ TEXT_BOX (17) object 142 pos=152400,9831 size=1066800,591829 | Phoenix
+ PLACEHOLDER (14) object 3 pos=1618893,198849 size=8085581,628377 | The Problem: Infrastructure projects often face cost overruns and time delays.
+ AUTO_SHAPE (1) Oval 15 pos=162053,36192 size=1429705,926214 | Phoenix
+ None Diagram 30 pos=5943600,1068275 size=5943600,2364737 | 
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 80 pos=609601,1068275 size=4953000,2360726 | 📌 Unplanned cost escalation can occur during project execution.  | ⏳ Schedule slippage can push proj
+ None Diagram 85 pos=609601,3670050 size=8305799,2468283 | 
+ CHART (3) Chart 99 pos=9068426,4038600 size=2818773,1751125 | 
+--- slide 3 ---
+ GROUP (6) object 2 pos=120340,88314 size=1226943,835294 | 
+ PLACEHOLDER (14) object 7 pos=3636245,150761 size=4919509,474489 | Proposed Solution- Aegis
+ GROUP (6) object 14 pos=105155,1379245 size=2911475,4357370 | 
+ TEXT_BOX (17) object 21 pos=154520,1404492 size=2760980,354330 | How It Solves the Problem
+ GROUP (6) object 22 pos=245363,2005596 size=2712720,821690 | 
+ GROUP (6) object 28 pos=245363,2865132 size=2712720,821690 | 
+ GROUP (6) object 34 pos=245363,3742956 size=2712720,821690 | 
+ GROUP (6) object 40 pos=245363,4620780 size=2677795,821690 | 
+ GROUP (6) object 78 pos=5158740,1390726 size=6909815,4481195 | 
+ TEXT_BOX (17) object 88 pos=9491344,1517903 size=2405380,311150 | Key Differentiator
+ GROUP (6) object 89 pos=9425940,2005596 size=2513330,840105 | 
+ GROUP (6) object 95 pos=9425940,2919996 size=2513076,839711 | 
+ GROUP (6) object 101 pos=9425940,3797820 size=2513330,840105 | 
+ GROUP (6) object 107 pos=9425940,4693932 size=2513330,840105 | 
+ GROUP (6) object 113 pos=152400,6036564 size=11852275,532130 | 
+ TEXT_BOX (17) object 118 pos=2531110,6140907 size=7393305,215444 | From fragmented processes to a guided, transparent and efficient approval journey – with Aegis.
+ GROUP (6) object 119 pos=-4762,6585713 size=12201525,277495 | 
+ TEXT_BOX (17) object 123 pos=5340477,6626453 size=1573530,155575 | @SIH Idea submission- Template
+ TEXT_BOX (17) object 124 pos=11475466,6622491 size=86995,162560 | 3
+ PICTURE (13) object 126 pos=9807579,19852 size=2204077,1025709 | 
+ AUTO_SHAPE (1) Oval 7 pos=162053,36192 size=1429705,926214 | Phoenix
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 12 pos=2857500,745607 size=6477000,442086 | Aegis is a web-based AI-powered predictive monitoring platform.
+ AUTO_SHAPE (1) Rectangle 49 pos=10058400,2201925 size=304800,541275 | 
+ AUTO_SHAPE (1) Rectangle 58 pos=9901642,3029305 size=304800,541275 | 
+ None Diagram 59 pos=2522372,1634090 size=7440097,3800444 | 
+ AUTO_SHAPE (1) Rectangle 60 pos=886967,2201924 size=1970533,443181 | It analyses historical OCMS data together with continuously updated PAIMANA project data.
+ AUTO_SHAPE (1) Rectangle 61 pos=886967,3011905 size=1856233,498883 | AI/ML models identify patterns associated with cost escalation, schedule delays and implementation r
+ AUTO_SHAPE (1) Rectangle 62 pos=886967,3895343 size=1856233,464805 | Each project receives a dynamic risk assessment based on its available data.
+ AUTO_SHAPE (1) Rectangle 63 pos=876905,4711550 size=1676400,493776 | The platform generates early-warning signals when a project shows indicators of potential problems.
+ PICTURE (13) Picture 69 pos=3037205,3392021 size=1950889,182896 | 
+ PICTURE (13) Picture 93 pos=8508372,2474805 size=182896,1950889 | 
+ AUTO_SHAPE (1) Rectangle 99 pos=9962469,3895343 size=248331,530351 | 
+ PICTURE (13) Picture 111 pos=9905347,4770859 size=274344,554784 | 
+ AUTO_SHAPE (1) Rectangle 146 pos=10086634,2162556 size=1785327,477522 | Action-oriented insights – helps monitoring agencies prioritize projects that need attention.
+ AUTO_SHAPE (1) Rectangle 150 pos=10036933,3088365 size=1785327,477522 | Historical + current data – uses past project trends along with continuously updated project informa
+ AUTO_SHAPE (1) Rectangle 152 pos=10082623,3979162 size=1785327,477522 | Predictive, not just monitoring – identifies potential risks before they become major issues.
+ AUTO_SHAPE (1) Rectangle 154 pos=10082623,4868188 size=1785327,477522 | Multi-sector adaptability – designed to analyse projects across different infrastructure sectors.
+--- slide 4 ---
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 52 pos=3581400,677756 size=5004232,322561 | 
+ GROUP (6) object 2 pos=0,6354762 size=12192000,503555 | 
+ TEXT_BOX (17) object 5 pos=11414886,6452717 size=89535,162560 | 4
+ TEXT_BOX (17) object 6 pos=5226177,6426504 size=2047239,208915 | @SIH Idea submission- Template
+ FREEFORM (5) object 7 pos=329768,252222 size=1252220,807720 | 
+ PICTURE (13) object 9 pos=9807579,19852 size=2204077,1025709 | 
+ PLACEHOLDER (14) object 10 pos=4399660,55575 size=3700271,437515 | Technical Approach
+ TEXT_BOX (17) object 11 pos=3686302,734896 size=4654550,208279 | A smart, integrated architecture with Approval Intelligence at the core
+ TEXT_BOX (17) TextBox 7 pos=329768,493090 size=1252220,369332 | Phoenix
+ AUTO_SHAPE (1) Oval 24 pos=241025,154459 size=1429705,926214 | Phoenix
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 35 pos=329768,1295400 size=5004232,1776314 | Data Sources | Historical OCMS database  | PAIMANA project-monitoring data  | Monthly project update
+ None Diagram 39 pos=5562599,1062789 size=6165977,2713350 | 
+ None Diagram 49 pos=221945,3189681 size=5004232,3016536 | 
+ AUTO_SHAPE (1) Oval 50 pos=1828800,4046621 size=1857502,1048218 | Workflow
+ None Diagram 51 pos=5562598,3924684 size=6165978,2134995 | 
+--- slide 5 ---
+ GROUP (6) object 2 pos=165996,51727 size=1126490,889000 | 
+ PLACEHOLDER (14) object 6 pos=4245864,55575 size=3700271,437515 | Innovation & Novelty
+ GROUP (6) object 8 pos=216383,1098753 size=2817925,1354936 | 
+ GROUP (6) object 17 pos=3087599,1098753 size=2817925,1354936 | 
+ GROUP (6) object 26 pos=5958815,1098753 size=2817925,1354936 | 
+ GROUP (6) object 35 pos=8830031,1098753 size=2817925,1354936 | 
+ GROUP (6) object 44 pos=4113272,2785865 size=3957954,2220595 | 
+ GROUP (6) object 49 pos=138669,3236934 size=3734435,1656714 | 
+ GROUP (6) object 55 pos=8189957,3220170 size=3714115,1656714 | 
+ GROUP (6) object 60 pos=399281,5524379 size=11367770,550545 | 
+ TEXT_BOX (17) object 65 pos=2597664,5564627 size=7696200,336631 | “Aegis transforms infrastructure monitoring from simply knowing what happened to predicting what cou
+ GROUP (6) object 66 pos=-4762,6311391 size=12201525,551815 | 
+ TEXT_BOX (17) object 70 pos=5378577,6466433 size=1452245,140970 | @SIH Idea submission- Template
+ TEXT_BOX (17) object 71 pos=11728195,6462471 size=82550,147955 | 5
+ GROUP (6) object 72 pos=-4762,-4762 size=12201525,3260090 | 
+ TEXT_BOX (17) TextBox 6 pos=201168,282470 size=1059139,369332 | Phoenix
+ AUTO_SHAPE (1) Oval 24 pos=162053,36192 size=1429705,926214 | Phoenix
+ AUTO_SHAPE (1) Flowchart: Connector 33 pos=399281,1219200 size=362719,351958 | 
+ AUTO_SHAPE (1) Flowchart: Connector 47 pos=6083045,1219200 size=362719,351958 | 
+ AUTO_SHAPE (1) Flowchart: Connector 53 pos=3186708,1200062 size=362719,351958 | 
+ AUTO_SHAPE (1) Flowchart: Connector 84 pos=8955594,1215964 size=362719,351958 | 
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 86 pos=914400,1215964 size=1959287,1080154 | AI/ML-Based Risk Detection: Uses project data to identify patterns associated with cost overruns, ti
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 88 pos=6613404,1212244 size=1959287,1080154 | Risk Driver Identification: Analyses project parameters to identify factors that may contribute to c
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 90 pos=3619515,1215964 size=1959287,1080154 | Dynamic Risk Scoring: Generates a project-level risk score to help identify projects requiring close
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 92 pos=9485953,1241076 size=1959287,1080154 | LLM-Enabled Project Intelligence: Can provide a natural-language interface for querying and understa
+ PICTURE (13) Graphic 95 pos=396805,3333415 size=480100,480100 | 
+ AUTO_SHAPE (1) Rectangle 97 pos=946484,3398502 size=2295873,344297 | Impact
+ AUTO_SHAPE (1) Rectangle 98 pos=580640,3875278 size=2848360,789566 | Target Users | Policymakers  | Project administrators  |  | Monitoring agencies  | Infrastructure de
+ PICTURE (13) Graphic 100 pos=8343645,3307632 size=526035,526035 | 
+ AUTO_SHAPE (1) Rectangle: Rounded Corners 101 pos=9001029,3382636 size=2475927,406637 | Benefits
+ AUTO_SHAPE (1) Rectangle 102 pos=8572691,3896105 size=3038669,776945 | Economic | Time | Administrative | Technical
+--- slide 6 ---
+ AUTO_SHAPE (1) Flowchart: Connector 30 pos=533400,4444744 size=381000,355856 | 
+ PLACEHOLDER (14) object 6 pos=4118494,120678 size=4136136,443711 | Feasibility & Viability
+ TEXT_BOX (17) object 7 pos=4615434,776096 size=2931160,170180 | From a 36-hour MVP to a scalable, real-world solution.
+ GROUP (6) object 8 pos=1229863,1176523 size=2860675,2943225 | 
+ GROUP (6) object 21 pos=4367389,1240569 size=2860557,2843798 | 
+ GROUP (6) object 35 pos=7407692,1278345 size=2860675,2843798 | 
+ GROUP (6) object 57 pos=291082,4355570 size=11135870,1488966 | 
+ GROUP (6) object 73 pos=-4762,6311391 size=12201525,551815 | 
+ TEXT_BOX (17) object 77 pos=5378577,6466433 size=1452245,140970 | @SIH Idea submission- Template
+ TEXT_BOX (17) object 78 pos=11728195,6462471 size=82550,147955 | 6
+ GROUP (6) object 79 pos=-4762,-4762 size=12201525,1068705 | 
+ AUTO_SHAPE (1) Oval 14 pos=199470,182556 size=1429705,926214 | Phoenix
+ PICTURE (13) Graphic 16 pos=1375147,1432383 size=557196,557196 | 
+ PICTURE (13) Graphic 18 pos=4515476,1265377 size=668831,668831 | 
+ PICTURE (13) Graphic 27 pos=7600794,1334708 size=598863,598863 | 
+ PICTURE (13) Graphic 29 pos=470871,4343538 size=506057,506057 | 
+ AUTO_SHAPE (1) Rectangle 31 pos=1791719,1462532 size=2130243,435075 | Technical Feasibility
+ AUTO_SHAPE (1) Rectangle 32 pos=1421257,1912853 size=2388743,2114836 | Uses existing project-monitoring data.  | Can be developed using open-source software.  | ML models 
+ AUTO_SHAPE (1) Rectangle 33 pos=5091421,1413131 size=1739401,400682 | Operational Feasibility
+ AUTO_SHAPE (1) Rectangle 41 pos=4623299,2133600 size=2310901,1677589 | Monthly data updates can continuously improve predictions.  | Dashboard can help monitoring agencies
+ AUTO_SHAPE (1) Rectangle 42 pos=8131056,1610955 size=1820085,345951 | Potential Challenges
+ AUTO_SHAPE (1) Rectangle 43 pos=7698019,2133600 size=2253122,1722481 | Missing/inconsistent project data  | Different project characteristics across sectors  | Limited var
+ AUTO_SHAPE (1) Rectangle 44 pos=1047478,4432071 size=1894337,404851 | Mitigation
+ AUTO_SHAPE (1) Rectangle 45 pos=533400,4849595 size=10744200,831882 | Data cleaning and validation  | Sector-wise/model-wise analysis  | Feature engineering  | Model comp

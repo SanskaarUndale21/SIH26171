@@ -1,0 +1,208 @@
+<!-- Slide number: 1 -->
+
+# SMART INDIA HACKATHON 2026
+
+![](Picture1.jpg)
+
+TITLE PAGE
+
+![](Picture4.jpg)
+
+Problem Statement ID – SIH26169
+Problem Statement Title-
+Theme-Smart automation
+PS Category- Software
+Team ID-
+Team Name-HexaBits
+
+<!-- Slide number: 2 -->
+# FUSION PRIVACY AGENT
+
+![](Picture10.jpg)
+Your Team Name
+Proposed Solution
+
+An on-device vision pipeline (BlazeFace, YOLOv8n, Florence-2, Tesseract OCR, NER) detects faces, passwords, card numbers, emails and phone numbers directly inside the browser.
+Only a redacted screenshot and a structural DOM manifest ever leave the device -- a server-side LLM plans every click, type or scroll from that sanitized context alone.
+A confirmation gate pauses before any high-risk action, and a floating pill plus a full chat side panel let a person drive the whole flow by typing or by voice.
+
+![browser.png](Picture15363.jpg)
+
+![shield.png](Picture15366.jpg)
+
+![lock.png](Picture15369.jpg)
+
+![robot.png](Picture15372.jpg)
+
+![click.png](Picture15375.jpg)
+Browser Screen
+On-Device Detect + Redact
+Sanitized Context
+Cloud LLM Plans Action
+Extension Executes
+
+@SIH Idea submission- Template
+2
+
+### Notes:
+
+<!-- Slide number: 3 -->
+# TECHNICAL APPROACH
+
+![](Picture11.jpg)
+HexaBits
+
+![browser.png](Picture17411.jpg)
+Chrome Extension (MV3, TypeScript)
+
+![cpu.png](Picture17414.jpg)
+Client: a Manifest V3 Chrome extension in TypeScript -- ONNX Runtime Web, Transformers.js and MediaPipe run fully on-device, inside a chrome.offscreen document immune to a host page's Trusted Types policy.
+Server: a Python FastAPI service exposing one swappable get_next_action() -- works with any OpenAI-compatible LLM (OpenAI, Groq, OpenRouter, or a local model).
+ONNX Runtime Web + Transformers.js
+
+![eye.png](Picture17417.jpg)
+MediaPipe BlazeFace + Tesseract OCR
+
+![server.png](Picture17420.jpg)
+
+![eye.png](Picture17426.jpg)
+
+![shield.png](Picture17429.jpg)
+
+![robot.png](Picture17432.jpg)
+
+![check.png](Picture17435.jpg)
+
+![click.png](Picture17438.jpg)
+FastAPI Planner Server
+Observe
+Redact
+Plan
+Confirm
+Act
+
+![robot.png](Picture17423.jpg)
+Loops every step until the task is done, a step limit is reached, or you say stop.
+Any OpenAI-compatible LLM
+
+@SIH Idea submission- Template
+3
+
+### Notes:
+
+<!-- Slide number: 4 -->
+# FEASIBILITY AND VIABILITY
+
+![](Picture10.jpg)
+Your Team Name
+
+Model hallucinated CSS selectors -> fixed by handing it real DOM element selectors, not a screenshot alone
+
+![check.png](Picture17411.jpg)
+Runs on hardware already in every user's pocket -- Chrome's WebGPU/WASM support plus ~420MB of quantized on-device models, no server-side GPU needed for perception.
+Real challenges hit while building: hallucinated selectors, browsers silently blocking workers, and unvalidated navigation targets.
+Solved with structural fixes, not patches -- see the three cases on the right.
+
+Host page CSP silently blocked ML workers -> fixed by moving perception into an isolated chrome.offscreen document
+
+![check.png](Picture17414.jpg)
+3
+real bugs found and fixed during live testing --
+root-caused from logs, never patched blindly.
+
+Model returned a label instead of a URL for navigation -> fixed with client-side URL validation before every action
+
+![check.png](Picture17417.jpg)
+
+@SIH Idea submission- Template
+4
+
+### Notes:
+
+<!-- Slide number: 5 -->
+# IMPACT AND BENEFITS
+
+![](Picture10.jpg)
+Your Team Name
+
+Privacy
+
+![shield.png](Picture17411.jpg)
+Compliant with GDPR/DPDP by architecture, not policy
+
+Productivity
+Makes cloud-AI browser agents viable on sensitive workflows -- banking, healthcare, government forms -- where sending a raw screenshot to a third-party LLM is a non-starter.
+Cuts repetitive form-filling and multi-step browser tasks down to a spoken or typed sentence, while every redaction stays visible on-screen instead of a black box.
+
+![bolt.png](Picture17415.jpg)
+Multi-step tasks done in one sentence
+
+Accessibility
+
+![access.png](Picture17419.jpg)
+Voice-driven control for hands-free use
+“Privacy by architecture, not by policy.”
+
+Transparency
+
+![eye.png](Picture17423.jpg)
+Every redaction shown live on the real page
+
+@SIH Idea submission- Template
+5
+
+### Notes:
+
+<!-- Slide number: 6 -->
+# RESEARCH  AND REFERENCES
+
+![](Picture11.jpg)
+Your Team Name
+Built entirely on peer-reviewed, open-source and industry-standard components:
+
+![cpu.png](Picture17411.jpg)
+
+![code.png](Picture17414.jpg)
+
+![eye.png](Picture17417.jpg)
+
+![browser.png](Picture17420.jpg)
+ONNX Runtime Web
+Transformers.js (Hugging Face)
+MediaPipe BlazeFace (Google)
+Ultralytics YOLOv8
+
+![robot.png](Picture17423.jpg)
+
+![chart.png](Picture17426.jpg)
+
+![scroll.png](Picture17429.jpg)
+Microsoft Florence-2
+OpenAI GPT-4o-mini
+Tesseract OCR
+
+@SIH Idea submission- Template
+6
+Problem Statement: SIH 2026 -- PS 26171, “On-device Visual Perception for Light-weight Browser Agents.”
+
+### Notes:
+
+<!-- Slide number: 7 -->
+
+![](Picture12.jpg)
+IMPORTANT INSTRUCTIONS
+Please ensure below pointers are met while submitting the Idea PPT:
+
+Kindly keep the maximum slides limit up to six (6). ( Including the title slide)
+Try to avoid paragraphs and post your idea in points /diagrams / Infographics /pictures
+Keep your explanation precise and easy to understand
+Idea should be unique and novel.
+You can only use provided template for making the PPT without changing the idea details pointers (mentioned in previous slides).
+You need to save the file in PDF and upload the same on portal. No PPT, Word Doc or any other format will be supported.
+
+Note - You can delete this slide (Important Pointers) when you upload the details of your idea on SIH portal.
+
+@SIH Idea submission- Template
+7
+
+### Notes:
