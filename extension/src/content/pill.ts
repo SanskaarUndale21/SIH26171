@@ -19,6 +19,7 @@ let root: ShadowRoot | null = null;
 let popupEl: HTMLDivElement | null = null;
 let pillEl: HTMLButtonElement | null = null;
 let statusEl: HTMLDivElement | null = null;
+let statusDotEl: HTMLSpanElement | null = null;
 let inputEl: HTMLTextAreaElement | null = null;
 let sendBtn: HTMLButtonElement | null = null;
 let confirmRow: HTMLDivElement | null = null;
@@ -26,6 +27,7 @@ let confirmRow: HTMLDivElement | null = null;
 let fadeTimer: number | null = null;
 let activeRunId: string | null = null;
 let pendingConfirmRequestId: string | null = null;
+let isRunning = false;
 
 function scheduleFade(): void {
   if (fadeTimer !== null) window.clearTimeout(fadeTimer);
@@ -40,25 +42,48 @@ function wake(): void {
   scheduleFade();
 }
 
+let closeTimer: number | null = null;
+
 function setPopupOpen(open: boolean): void {
   if (!popupEl) return;
-  popupEl.style.display = open ? "flex" : "none";
+  if (closeTimer !== null) {
+    window.clearTimeout(closeTimer);
+    closeTimer = null;
+  }
   if (open) {
+    popupEl.style.display = "flex";
+    popupEl.classList.remove("closing");
     wake();
     inputEl?.focus();
+  } else if (popupEl.style.display !== "none") {
+    popupEl.classList.add("closing");
+    closeTimer = window.setTimeout(() => {
+      if (popupEl) {
+        popupEl.style.display = "none";
+        popupEl.classList.remove("closing");
+      }
+      closeTimer = null;
+    }, 160);
   }
 }
 
 function setStatus(text: string, isError = false): void {
-  if (!statusEl) return;
+  if (!statusEl || !statusDotEl) return;
   statusEl.textContent = text;
   statusEl.style.color = isError ? "#fca5a5" : "#9ca3af";
+  statusDotEl.style.background = isError ? "#ef4444" : isRunning ? "#f2a63c" : "#4ade80";
+  statusDotEl.classList.toggle("pulse", isRunning && !isError);
 }
 
 function setRunning(running: boolean): void {
   if (!sendBtn) return;
+  isRunning = running;
   sendBtn.disabled = running;
   pillEl?.classList.toggle("running", running);
+  if (statusDotEl) {
+    statusDotEl.style.background = running ? "#f2a63c" : "#4ade80";
+    statusDotEl.classList.toggle("pulse", running);
+  }
   if (!running) {
     activeRunId = null;
     scheduleFade();
@@ -228,37 +253,50 @@ export function initPill(): void {
     .pill {
       width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
       background: linear-gradient(135deg, #2563eb, #7c3aed);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.16);
       display: flex; align-items: center; justify-content: center;
       font-size: 18px; color: #fff;
-      transition: opacity 0.4s ease, transform 0.2s ease;
+      transition: opacity 0.4s ease, transform 0.15s ease-out, box-shadow 0.2s ease;
       opacity: 1;
     }
     .pill.idle { opacity: 0.35; transform: scale(0.85); }
     .pill.running { animation: pulse 1.2s infinite; }
     .pill:hover { opacity: 1; transform: scale(1); }
+    .pill:active { transform: scale(0.9); }
     @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(37,99,235,0.6);} 50% { box-shadow: 0 0 0 8px rgba(37,99,235,0);} }
     .popup {
       display: none; flex-direction: column; gap: 6px;
       position: absolute; bottom: 54px; right: 0;
       width: 260px; background: #111827; border: 1px solid #374151; border-radius: 12px;
-      padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      padding: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
       font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      animation: popupIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
+    .popup.closing { animation: popupOut 0.16s cubic-bezier(0.4, 0, 0.68, 0.06) both; }
+    @keyframes popupIn { from { opacity: 0; transform: translateY(6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes popupOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(6px) scale(0.97); } }
     .popup-header { display:flex; justify-content:space-between; align-items:center; }
     .popup-title { font-size: 12px; font-weight: 600; color: #f3f4f6; }
     .popup-expand { font-size: 10px; color: #93c5fd; background: none; border: none; cursor: pointer; }
+    .popup-expand:hover { color: #bfdbfe; }
     textarea {
       resize: none; height: 44px; border-radius: 8px; border: 1px solid #374151;
       background: #1f2937; color: #f3f4f6; font-size: 12px; padding: 6px; font-family: inherit;
+      transition: border-color 0.15s ease;
     }
     textarea:focus { outline: none; border-color: #2563eb; }
     .send-btn {
       border: none; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer;
-      font-size: 12px; padding: 6px;
+      font-size: 12px; padding: 6px; transition: background 0.15s ease, transform 0.1s ease-out;
     }
+    .send-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .send-btn:active:not(:disabled) { transform: scale(0.97); }
     .send-btn:disabled { background: #374151; cursor: default; }
-    .status { font-size: 10px; color: #9ca3af; min-height: 12px; }
+    .status-row { display: flex; align-items: center; gap: 6px; min-height: 12px; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; flex-shrink: 0; transition: background 0.2s ease; }
+    .status-dot.pulse { animation: dotPulse 1.3s ease-in-out infinite; }
+    @keyframes dotPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .status { font-size: 10px; color: #9ca3af; }
   `;
   root.appendChild(style);
 
@@ -301,8 +339,14 @@ export function initPill(): void {
   sendBtn.textContent = "Run";
   sendBtn.addEventListener("click", runTask);
 
+  const statusRow = document.createElement("div");
+  statusRow.className = "status-row";
+  statusDotEl = document.createElement("span");
+  statusDotEl.className = "status-dot";
   statusEl = document.createElement("div");
   statusEl.className = "status";
+  statusRow.appendChild(statusDotEl);
+  statusRow.appendChild(statusEl);
 
   confirmRow = document.createElement("div");
   confirmRow.style.display = "none";
@@ -310,7 +354,7 @@ export function initPill(): void {
   popupEl.appendChild(header);
   popupEl.appendChild(inputEl);
   popupEl.appendChild(sendBtn);
-  popupEl.appendChild(statusEl);
+  popupEl.appendChild(statusRow);
   popupEl.appendChild(confirmRow);
 
   root.appendChild(popupEl);
