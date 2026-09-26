@@ -7,3 +7,4 @@ __pycache__/
 .claude/
 scripts/pid.json
 eval/.bundle-*.mjs
+ppt_work/qa/

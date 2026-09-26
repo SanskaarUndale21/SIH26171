@@ -24,7 +24,15 @@ const ICONS = {
   code: fa.FaCode,
   robot: fa.FaRobot,
   eye: fa.FaEye,
-  scroll: fa.FaScroll
+  scroll: fa.FaScroll,
+  face: fa.FaUserCircle,
+  gauge: fa.FaTachometerAlt,
+  users: fa.FaUsers,
+  rupee: fa.FaRupeeSign,
+  landmark: fa.FaLandmark,
+  layers: fa.FaLayerGroup,
+  vault: fa.FaKey,
+  flask: fa.FaFlask
 };
 
 async function main() {
