@@ -72,7 +72,7 @@ def test_jarvis_proxy_forces_server_model(monkeypatch):
 def test_placeholder_is_never_typed():
     action = NextActionResponse(action="type", target=ActionTarget(selector="#email"), value="[EMAIL_1]")
     safe = enforce_redaction_safety(action, [])
-    assert safe.action == "ask_user" and safe.value is None
+    assert safe.action == "ask_user" and safe.value == "[EMAIL_1]"
 
 
 def test_closed_model_detection(monkeypatch):

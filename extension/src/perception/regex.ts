@@ -5,6 +5,7 @@ import rulesFile from "../../../shared/pii-rules.json";
 
 export interface RegexMatch {
   type: string; // email | phone_number | card_number | aadhaar | pan | ip_address | secret
+  token: string; // placeholder name shared with Jarvis: EMAIL, PHONE, CARD, ...
   text: string;
   start: number;
   end: number;
@@ -12,6 +13,7 @@ export interface RegexMatch {
 
 interface PiiRule {
   type: string;
+  token: string;
   pattern: string;
   flags: string;
   group?: number;
@@ -80,8 +82,34 @@ export function findPii(text: string): RegexMatch[] {
       // Earlier rules win on overlap (card before aadhaar/phone), so a span is never
       // reported twice under two different types.
       if (overlaps(start, end)) continue;
-      matches.push({ type: rule.type, text: value, start, end });
+      matches.push({ type: rule.type, token: rule.token, text: value, start, end });
     }
   }
   return matches.sort((a, b) => a.start - b.start);
 }
+
+// Replaces private values in free text (the task someone types) with placeholders such as
+// [EMAIL_1], the same scheme Jarvis uses. The real values stay in `values`, on this device.
+export function maskText(text: string): { masked: string; values: Map<string, string>; types: string[] } {
+  const values = new Map<string, string>();
+  const byValue = new Map<string, string>();
+  const counts: Record<string, number> = {};
+  const types: string[] = [];
+  let masked = "";
+  let last = 0;
+  for (const m of findPii(text)) {
+    let token = byValue.get(m.text);
+    if (!token) {
+      counts[m.token] = (counts[m.token] ?? 0) + 1;
+      token = `[${m.token}_${counts[m.token]}]`;
+      byValue.set(m.text, token);
+      values.set(token, m.text);
+      types.push(m.type);
+    }
+    masked += text.slice(last, m.start) + token;
+    last = m.end;
+  }
+  return { masked: masked + text.slice(last), values, types };
+}
+
+export const PLACEHOLDER_RE = /\[(SECRET|EMAIL|CARD|AADHAAR|PAN|PHONE|IP)_\d+\]/g;

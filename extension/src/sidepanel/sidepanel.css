@@ -119,6 +119,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 }
 .you .from { display: block; font-size: var(--f-1); color: #b9c0cf; margin-bottom: 2px; }
 
+.masked-goal { align-self: flex-end; display: flex; align-items: center; gap: 6px; font-size: var(--f-1); color: var(--ink-2); }
+.masked-goal .masks { margin: 0; }
 .note { color: var(--ink-2); font-size: var(--f-1); display: flex; align-items: center; gap: 8px; }
 .note.working::before {
   content: ""; width: 14px; height: 14px; flex: none; border-radius: 50%;

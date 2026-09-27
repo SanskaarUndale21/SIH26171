@@ -8,6 +8,7 @@ import type {
 import type { NextActionResponse, RedactionEntry, RunMetrics, StepMetrics, StructuredSummary } from "../types";
 import { claimRemoteTask, postTaskEvent, requestNextAction, type TimedAction } from "./server";
 import { getVaultAnswer, saveVaultAnswer } from "../privacy/vault";
+import { maskText, PLACEHOLDER_RE } from "../perception/regex";
 
 const OFFSCREEN_URL = "offscreen.html";
 const MAX_STEPS = 15;
@@ -277,7 +278,19 @@ const pendingAskUser = new Map<string, (answer: string | null) => void>();
 // cancels. This is what makes it an agent rather than a single-shot "click one thing" tool --
 // each step's outcome is folded into the next step's prompt as a short history, so the
 // planner knows what it already tried.
-async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
+// If a placeholder the planner hands back came from the task the person typed, the real value
+// is right here: fill it locally. Null when any placeholder isn't ours (e.g. a Jarvis task).
+function restoreFromTask(value: string | null, values: Map<string, string>): string | null {
+  if (!value) return null;
+  const tokens = value.match(PLACEHOLDER_RE);
+  if (!tokens || !tokens.every((t) => values.has(t))) return null;
+  return value.replace(PLACEHOLDER_RE, (t) => values.get(t) ?? t);
+}
+
+async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
+  // Private values typed into the task (an email, a phone number) never reach the planner:
+  // it gets [EMAIL_1] and the real value stays in this function.
+  const { masked: taskGoal, values: taskValues } = maskText(rawGoal);
   const tab = await getActiveTab();
   let tabId = tab.id!;
   const historyLines: string[] = [];
@@ -380,7 +393,8 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
 
       // Answered this exact field before (by label, on any page)? Fill it straight away
       // instead of asking again -- still entirely local, still never sent to the planner.
-      const savedAnswer = fieldLabel ? await getVaultAnswer(fieldLabel) : null;
+      const fromTask = restoreFromTask(action.value, taskValues);
+      const savedAnswer = fromTask ?? (fieldLabel ? await getVaultAnswer(fieldLabel) : null);
       if (savedAnswer) {
         const execStart = performance.now();
         const execResponse = (await executeOnTab(tabId, {
@@ -389,9 +403,10 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
           target: action.target,
           value: savedAnswer
         })) as ExecuteActionResponse;
+        const where = fromTask ? "a value from your task" : "a saved answer";
         const stepStatus = execResponse.ok
-          ? `auto-filled "${fieldLabel}" from a saved answer (value not shared with the planner)`
-          : `tried to auto-fill "${fieldLabel}" from a saved answer but failed: ${execResponse.error ?? "unknown"}`;
+          ? `filled "${fieldLabel ?? action.target.selector ?? "the field"}" with ${where} (value not shared with the planner)`
+          : `tried to fill "${fieldLabel ?? "the field"}" with ${where} but failed: ${execResponse.error ?? "unknown"}`;
         const execMs = performance.now() - execStart;
         historyLines.push(`step ${step}: ask_user ("${question}") -> ${stepStatus}`);
         broadcastAll(tabId, {

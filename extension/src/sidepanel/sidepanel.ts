@@ -1,6 +1,7 @@
 import type { NextActionResponse, RedactionEntry, RiskTier, RunMetrics, StepMetrics } from "../types";
 import type { ExtensionMessage } from "../messages";
 import { clearVault } from "../privacy/vault";
+import { maskText, PLACEHOLDER_RE } from "../perception/regex";
 
 const messagesEl = document.getElementById("messages") as HTMLElement;
 const composer = document.getElementById("composer") as HTMLFormElement;
@@ -310,11 +311,27 @@ function addAskUserPrompt(requestId: string, question: string): void {
 
 // ---------- running a task
 
+const TOKEN_TYPES: Record<string, string> = {
+  EMAIL: "email", PHONE: "phone_number", CARD: "card_number", AADHAAR: "aadhaar", PAN: "pan", SECRET: "secret", IP: "ip_address"
+};
+
 function addYou(text: string, fromJarvis = false): void {
   const bubble = el("div", "you");
   if (fromJarvis) bubble.appendChild(el("span", "from", "Sent from Jarvis"));
   bubble.append(text);
   add(bubble);
+  // Which parts of the task stay on this device: typed values are masked by the background
+  // before the planner sees the goal; a Jarvis task arrives with placeholders already.
+  const types = fromJarvis
+    ? [...text.matchAll(PLACEHOLDER_RE)].map((m) => TOKEN_TYPES[m[1]] ?? m[1].toLowerCase())
+    : maskText(text).types;
+  if (types.length) {
+    const note = el("div", "masked-goal");
+    note.appendChild(el("span", "", "Kept on this device:"));
+    const bars = masksFor(types.map((type) => ({ type, confidence: 1, bbox: [0, 0, 0, 0], method: "token" })));
+    if (bars) note.appendChild(bars);
+    add(note);
+  }
 }
 
 function autoGrow(): void {

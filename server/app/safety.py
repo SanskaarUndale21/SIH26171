@@ -48,11 +48,13 @@ def enforce_redaction_safety(action: NextActionResponse, manifest: list[Redactio
     if action.action != "type":
         return action
     if action.value and PLACEHOLDER_RE.search(action.value):
-        # The real value lives only on the user's device, so ask them for it there.
+        # The real value lives only on the user's device. Keep the placeholder (never the value:
+        # the server doesn't have it) so the extension can fill it locally if it holds it, and
+        # otherwise asks the person.
         return NextActionResponse(
             action="ask_user",
             target=action.target,
-            value=None,
+            value=action.value,
             verified=action.verified,
             question="This field needs a private value that was masked before reaching the planner. What should go here?",
         )
