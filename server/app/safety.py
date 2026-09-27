@@ -8,7 +8,14 @@ hypothetical one: typing a hallucinated value into a field the model cannot actu
 could silently overwrite whatever real data belongs there. This module is the fail-safe
 that catches it after the model call, regardless of how the prompt is worded.
 """
+import re
+
 from .models import ActionTarget, NextActionResponse, RedactionEntry
+
+# Placeholders the Jarvis desktop app substitutes for private values before a task reaches
+# this server (tokens from shared/pii-rules.json). Typing one literally would put "[EMAIL_1]"
+# into a real form field.
+PLACEHOLDER_RE = re.compile(r"\[(SECRET|EMAIL|CARD|AADHAAR|PAN|PHONE|IP)_\d+\]")
 
 BBox = tuple[float, float, float, float]
 
@@ -40,6 +47,15 @@ def targets_redacted_region(target: ActionTarget, manifest: list[RedactionEntry]
 def enforce_redaction_safety(action: NextActionResponse, manifest: list[RedactionEntry]) -> NextActionResponse:
     if action.action != "type":
         return action
+    if action.value and PLACEHOLDER_RE.search(action.value):
+        # The real value lives only on the user's device, so ask them for it there.
+        return NextActionResponse(
+            action="ask_user",
+            target=action.target,
+            value=None,
+            verified=action.verified,
+            question="This field needs a private value that was masked before reaching the planner. What should go here?",
+        )
     if not targets_redacted_region(action.target, manifest):
         return action
 
