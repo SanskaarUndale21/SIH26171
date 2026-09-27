@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T08:08:56.766Z",
+  "generatedAt": "2026-09-27T10:30:12.634Z",
   "detection": {
     "items": 32,
     "truePositives": 21,
@@ -64,8 +64,8 @@
     "failures": []
   },
   "latency": {
-    "fusionMsPerPage": 0.088,
-    "regexMsPerText": 0.1024
+    "fusionMsPerPage": 0.08,
+    "regexMsPerText": 0.0838
   },
   "items": [
     {

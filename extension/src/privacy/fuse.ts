@@ -38,6 +38,8 @@ const DOM_NAME_HINTS: [RegExp, PiiType][] = [
   [/\bdob\b|birth/i, "date_of_birth"],
   [/\botp\b|\bcvv\b|\bcvc\b|\bpin\b/i, "secret"],
   [/mobile|phone/i, "phone_number"],
+  // plain type="text" email inputs (DemoQA's #userEmail, placeholder "name@example.com")
+  [/e-?mail|@/i, "email"],
   [/address|street/i, "address"]
 ];
 

@@ -1,6 +1,6 @@
 # Eval results: privacy-preserving browser agent
 
-Generated: 2026-09-27T08:08:56.766Z. Reproduce with `cd eval && npm install && npm run eval`.
+Generated: 2026-09-27T10:30:12.634Z. Reproduce with `cd eval && npm install && npm run eval`.
 
 Fixture (`eval/fixture.ts`, same ids as `demo/fixture.html`): an Indian scholarship
 application with 21 items that must be masked (13 DOM fields, 2 fields only vision can
@@ -19,7 +19,7 @@ accuracy on real screenshots is measured live in the side panel, not here.
 | Precision | **91.3%** (21/23) |
 | F1 | 95.5% |
 | False positives | 2/11 controls |
-| Fusion latency | 0.088 ms per page (avg of 200 runs) |
+| Fusion latency | 0.080 ms per page (avg of 200 runs) |
 
 ## 2. Redaction precision (pixel level)
 
@@ -35,7 +35,7 @@ accuracy on real screenshots is measured live in the side panel, not here.
 |---|---|
 | Precision | **100.0%** (14/14) |
 | Recall | **100.0%** (14/14) |
-| Latency | 0.1024 ms per text |
+| Latency | 0.0838 ms per text |
 
 | Type | TP | FN | FP | Precision | Recall |
 |---|---|---|---|---|---|

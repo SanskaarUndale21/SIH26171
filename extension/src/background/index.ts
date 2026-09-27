@@ -159,6 +159,42 @@ function waitForTabLoad(tabId: number, timeoutMs = 10000): Promise<void> {
   });
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Found live on a real site: a click that navigates (Wikipedia search) unloads the page's
+// content script, so the next message either hits a page whose script hasn't loaded yet
+// ("Receiving end does not exist") or loses the click's own reply ("message port closed").
+// Wait for the tab to finish loading and retry instead of failing the run.
+const NAVIGATION_GAP = /Receiving end does not exist|message port closed|back\/forward cache|Could not establish connection/i;
+
+async function sendToTab<T>(tabId: number, message: ExtensionMessage, attempts = 8): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return (await chrome.tabs.sendMessage(tabId, message)) as T;
+    } catch (err) {
+      if (i >= attempts || !NAVIGATION_GAP.test(String(err))) throw err;
+      await waitForTabLoad(tabId, 5000);
+      await sleep(250 * (i + 1));
+    }
+  }
+}
+
+// An action whose page navigates away mid-reply still happened: count it as executed.
+async function executeOnTab(tabId: number, message: ExtensionMessage): Promise<ExecuteActionResponse> {
+  try {
+    return (await chrome.tabs.sendMessage(tabId, message)) as ExecuteActionResponse;
+  } catch (err) {
+    if (/message port closed|back\/forward cache/i.test(String(err))) {
+      await waitForTabLoad(tabId, 8000);
+      return { ok: true };
+    }
+    if (NAVIGATION_GAP.test(String(err))) {
+      return sendToTab<ExecuteActionResponse>(tabId, message);
+    }
+    return { ok: false, error: String(err) };
+  }
+}
+
 // Deliberately re-derived from the CHOSEN action, not the request-level risk_tier field.
 // risk_tier (privacy/manifest.ts) is computed from the page's ambient structured summary --
 // e.g. "does this page have a submit button anywhere" -- before the planner has even picked
@@ -258,7 +294,8 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       return;
     }
 
-    const domResponse = (await chrome.tabs.sendMessage(tabId, { type: "GET_DOM_SNAPSHOT" })) as
+    await waitForTabLoad(tabId, 8000);
+    const domResponse = (await sendToTab(tabId, { type: "GET_DOM_SNAPSHOT" })) as
       | GetDomSnapshotResponse
       | { ok: false; error: string };
     if (!domResponse.ok) {
@@ -346,7 +383,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       const savedAnswer = fieldLabel ? await getVaultAnswer(fieldLabel) : null;
       if (savedAnswer) {
         const execStart = performance.now();
-        const execResponse = (await chrome.tabs.sendMessage(tabId, {
+        const execResponse = (await executeOnTab(tabId, {
           type: "EXECUTE_ACTION",
           action: "type",
           target: action.target,
@@ -380,7 +417,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       let stepStatus: string;
       const execStart = performance.now();
       if (answer && answer.trim()) {
-        const execResponse = (await chrome.tabs.sendMessage(tabId, {
+        const execResponse = (await executeOnTab(tabId, {
           type: "EXECUTE_ACTION",
           action: "type",
           target: action.target,
@@ -476,7 +513,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
         }
       }
     } else {
-      const execResponse = (await chrome.tabs.sendMessage(tabId, {
+      const execResponse = (await executeOnTab(tabId, {
         type: "EXECUTE_ACTION",
         action: action.action,
         target: action.target,

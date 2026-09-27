@@ -81,3 +81,25 @@ def test_closed_model_detection(monkeypatch):
     monkeypatch.setenv("PLANNER_MODEL", planner.DEFAULT_PLANNER_MODEL)
     info = planner.planner_info()
     assert info["open_weights"] is True and info["endpoint"] == planner.DEFAULT_BASE_URL
+
+
+def test_action_synonyms_are_normalized():
+    assert planner.normalize_action("select") == "type"
+    assert planner.normalize_action("Go To") == "navigate"
+    assert planner.normalize_action("done") == "none"
+    try:
+        planner.normalize_action("teleport")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown action must not be accepted")
+
+
+def test_click_with_value_on_select_becomes_choose():
+    from app.models import InteractiveElementSummary, StructuredSummary
+    summary = StructuredSummary(fields=1, submit_button=None, detected_via="dom", interactive_elements=[
+        InteractiveElementSummary(selector="#course", tag="select", label="course", isSubmit=False, options=["B.Tech", "B.Sc"])])
+    click = NextActionResponse(action="click", target=ActionTarget(selector="#course"), value="B.Sc")
+    assert planner.fix_select_click(click, summary).action == "type"
+    wrong = NextActionResponse(action="click", target=ActionTarget(selector="#course"), value="MBA")
+    assert planner.fix_select_click(wrong, summary).action == "click"

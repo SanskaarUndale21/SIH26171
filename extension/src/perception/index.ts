@@ -79,8 +79,11 @@ export async function runPerception(inputs: PerceptionInputs): Promise<Perceptio
   }
   const florenceMs = performance.now() - tFlorence;
 
+  // Matches must be found in the SAME string wordsForSpan walks: ocr.fullText has newlines and
+  // different spacing, so offsets from it mapped onto the wrong words (masks landed ~25px off
+  // the printed email in a live run).
   const joinedText = ocr.words.map((w) => w.text).join(" ");
-  const piiMatches = findPii(ocr.fullText || joinedText);
+  const piiMatches = findPii(joinedText);
   for (const m of piiMatches) {
     const hitWords = wordsForSpan(ocr.words, joinedText, m.start, m.end);
     if (hitWords.length === 0) continue;
@@ -94,7 +97,7 @@ export async function runPerception(inputs: PerceptionInputs): Promise<Perceptio
 
   const tNer = performance.now();
   try {
-    const entities = await findNamedEntities(ocr.fullText || joinedText);
+    const entities = await findNamedEntities(joinedText);
     for (const e of entities) {
       const hitWords = wordsForSpan(ocr.words, joinedText, e.start, e.end);
       if (hitWords.length === 0) continue;

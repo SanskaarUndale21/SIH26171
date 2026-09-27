@@ -90,6 +90,11 @@ SYSTEM_PROMPT = (
     "[CARD_1]. Each stands for a private value that stays on the user's device. Never type a "
     "placeholder into a field and never guess the value behind it; when a field needs one, "
     "return action=\"ask_user\" for that field instead.\n\n"
+    "Submitting is always the LAST step: before choosing a submit/pay/confirm button, check the "
+    "progress history and make sure every value the task goal names has already been filled in. "
+    "If the goal asks to submit, the task is NOT done until the submit button has been clicked: "
+    "do not return action=\"none\" before that. After it has been submitted, do not keep "
+    "editing the form; then return action=\"none\".\n\n"
     "Respond with exactly one action.\n\n"
     "Respond with ONLY a JSON object of this exact shape, no other text:\n"
     '{"action": "click|type|scroll|navigate|open_tab|none|ask_user", '
@@ -179,6 +184,29 @@ def _build_user_content(
     ]
 
 
+# json_object mode (the fallback for providers without strict json_schema) doesn't enforce the
+# enum, and a live run got action="select" for a dropdown. Map the common synonyms onto the
+# real action set instead of failing the whole run on a validation error.
+ACTION_SYNONYMS = {
+    "select": "type", "choose": "type", "set": "type", "fill": "type", "input": "type", "enter": "type",
+    "press": "click", "tap": "click", "submit": "click", "check": "click",
+    "goto": "navigate", "go_to": "navigate", "visit": "navigate", "open": "navigate",
+    "new_tab": "open_tab",
+    "done": "none", "finish": "none", "finished": "none", "complete": "none", "stop": "none",
+    "ask": "ask_user", "question": "ask_user",
+}
+VALID_ACTIONS = {"click", "type", "scroll", "navigate", "open_tab", "none", "ask_user"}
+
+
+def normalize_action(value) -> str:
+    name = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    name = ACTION_SYNONYMS.get(name, name)
+    if name not in VALID_ACTIONS:
+        # Never guess "none" here: that would report a task as finished when it isn't.
+        raise ValueError(f"planner returned an unknown action {value!r}")
+    return name
+
+
 def get_next_action(
     sanitized_image_b64: str,
     manifest: list[RedactionEntry],
@@ -224,14 +252,35 @@ def get_next_action(
     raw = completion.choices[0].message.content
     parsed = json.loads(raw)
 
+    # Live on a real site the model returned action="click" WITH a question for a field it had
+    # no value for: the question is the real intent, so ask the person instead of clicking.
+    name = normalize_action(parsed.get("action"))
+    if parsed.get("question") and name in ("click", "type") and not parsed.get("value"):
+        name = "ask_user"
+
     action = NextActionResponse(
-        action=parsed["action"],
+        action=name,
         target=ActionTarget(**parsed["target"]),
         value=parsed.get("value"),
         verified=False,
         question=parsed.get("question"),
     )
-    return enforce_redaction_safety(action, manifest)
+    return enforce_redaction_safety(fix_select_click(action, structured_summary), manifest)
+
+
+def fix_select_click(action: NextActionResponse, summary: StructuredSummary) -> NextActionResponse:
+    """A live run clicked a <select> while passing the option it wanted as `value`: clicking
+    only opens the dropdown, so nothing was chosen. That intent is action="type" (which the
+    extension handles for selects), as long as the value is one of the real options."""
+    if action.action != "click" or not action.value or not action.target.selector:
+        return action
+    element = next((e for e in summary.interactive_elements if e.selector == action.target.selector), None)
+    if element is None or element.tag != "select":
+        return action
+    options = element.options or []
+    if options and action.value not in options:
+        return action
+    return action.model_copy(update={"action": "type"})
 
 
 JARVIS_FIELDS = ("messages", "tools", "tool_choice", "temperature", "max_tokens")
