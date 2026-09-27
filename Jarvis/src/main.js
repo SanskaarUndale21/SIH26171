@@ -3,8 +3,10 @@ const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, sc
 const config = require("./config");
 const { Session, runTurn } = require("./agent");
 const perception = require("./perception");
+const localBridge = require("./localbridge");
 
 const HOTKEY = "CommandOrControl+Shift+J";
+const TALK_HOTKEY = "CommandOrControl+Shift+Space";
 const ASSETS = path.join(__dirname, "..", "assets");
 
 let win = null;
@@ -132,6 +134,11 @@ ipcMain.handle("config:get", () => config.publicView());
 ipcMain.handle("config:set", (_e, update) => config.save(update || {}));
 ipcMain.on("window:hide", () => win.hide());
 
+// Answers to questions the browser agent asked Jarvis over the local bridge.
+ipcMain.on("bridge:answer", (_e, { requestId, answer, approved }) => {
+  localBridge.answer(String(requestId), { answer: answer ?? null, approved: approved ?? null });
+});
+
 // Push-to-talk: the renderer records and resamples to 16 kHz mono, Whisper runs here on-device.
 ipcMain.handle("voice:transcribe", async (_e, samples) => {
   if (!perception.modelsAvailable()) return { ok: false, error: "Whisper model not found (extension/public/models)." };
@@ -186,6 +193,19 @@ app.whenReady().then(() => {
   if (!globalShortcut.register(HOTKEY, toggleWindow)) {
     console.warn(`Could not register ${HOTKEY}; use the tray icon instead.`);
   }
+  // Talk hotkey: bring Jarvis up and start (or stop) conversation mode.
+  globalShortcut.register(TALK_HOTKEY, () => {
+    showWindow();
+    win.webContents.send("voice:toggle");
+  });
+
+  localBridge.start({
+    onPrompt: (prompt) => {
+      if (!prompt.auto && !win.isVisible()) showWindow();
+      send({ type: "browser_prompt", ...prompt });
+    },
+    onDismiss: (requestId) => send({ type: "browser_prompt_dismiss", requestId }),
+  });
   win.once("ready-to-show", showWindow);
 
   // JARVIS_SMOKE=<file.png>: render once, save a screenshot, exit. Used to check the UI in CI.

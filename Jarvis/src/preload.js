@@ -9,8 +9,9 @@ contextBridge.exposeInMainWorld("jarvis", {
   setConfig: (c) => ipcRenderer.invoke("config:set", c),
   hide: () => ipcRenderer.send("window:hide"),
   transcribe: (samples) => ipcRenderer.invoke("voice:transcribe", samples),
+  bridgeAnswer: (requestId, result) => ipcRenderer.send("bridge:answer", { requestId, ...result }),
   on: (channel, fn) => {
-    const allowed = ["agent:event", "chat:cleared", "settings:open", "window:shown"];
+    const allowed = ["agent:event", "chat:cleared", "settings:open", "window:shown", "voice:toggle"];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, payload) => fn(payload));
   },

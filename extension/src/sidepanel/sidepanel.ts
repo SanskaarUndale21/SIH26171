@@ -240,6 +240,7 @@ function setRunning(running: boolean): void {
 function addConfirmPrompt(requestId: string, action: NextActionResponse, _riskTier: RiskTier, unfilled: string[]): void {
   setWorking(null);
   const box = el("section", "prompt");
+  box.dataset.requestId = requestId;
   box.appendChild(el("h2", "", "Needs your OK"));
   const target = action.target.selector ? ` ${action.target.selector}` : "";
   const text = `The next step is to ${action.action === "click" ? "click" : action.action}${target}. That can submit, pay or delete, so it waits for you.`;
@@ -277,6 +278,7 @@ function addConfirmPrompt(requestId: string, action: NextActionResponse, _riskTi
 function addAskUserPrompt(requestId: string, question: string): void {
   setWorking(null);
   const box = el("section", "prompt local");
+  box.dataset.requestId = requestId;
   box.appendChild(el("h2", "", question));
   const input = el("input");
   input.type = "text";
@@ -393,6 +395,18 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
       if (message.runId !== activeRunId) return;
       addAskUserPrompt(message.requestId, message.question);
       return;
+    case "PROMPT_RESOLVED": {
+      // answered in Jarvis: close this copy without sending a second answer
+      const box = messagesEl.querySelector<HTMLElement>(`.prompt[data-request-id="${CSS.escape(message.requestId)}"]`);
+      if (!box) return;
+      box.querySelector("input")?.remove();
+      box.querySelector(".hint")?.remove();
+      box.querySelector(".row")?.replaceWith(el("p", "answered", "Answered in Jarvis, on this computer."));
+      pendingAskUserRespond = null;
+      pendingConfirmRespond = null;
+      setWorking("Working");
+      return;
+    }
   }
 });
 

@@ -79,6 +79,15 @@ export interface TaskStartedMessage {
   source: "sidepanel" | "jarvis";
 }
 
+// Background -> sidepanel/pill (broadcast): a prompt was answered somewhere else (in Jarvis,
+// over the local bridge), so the panel's copy of it should close.
+export interface PromptResolvedMessage {
+  type: "PROMPT_RESOLVED";
+  runId: string;
+  requestId: string;
+  via: "jarvis";
+}
+
 // Sidepanel -> background, every ~1.5s while the panel is open: pick up a task Jarvis queued
 // on the server, if any. The background also checks on a 30s alarm when the panel is closed.
 export interface PollRemoteTaskMessage {
@@ -162,7 +171,8 @@ export type ExtensionMessage =
   | CancelTaskMessage
   | OpenSidePanelMessage
   | TaskStartedMessage
-  | PollRemoteTaskMessage;
+  | PollRemoteTaskMessage
+  | PromptResolvedMessage;
 
 export interface GetDomSnapshotResponse {
   ok: true;

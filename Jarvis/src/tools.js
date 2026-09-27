@@ -148,7 +148,10 @@ async function runBrowserTask(goal, ctx) {
     return `Can't reach the SIH server at ${hub}. Start it with: node scripts/dev.mjs demo`;
   }
 
-  ctx.progress("Sent to the browser agent. Waiting for Chrome to pick it up...");
+  // Let the extension ask Jarvis, on this computer, for values and OKs this task needs.
+  const bridge = require("./localbridge");
+  if (ctx.redactor) bridge.registerTask(task.id, ctx.redactor);
+  ctx.progress("Sent to the browser agent. Waiting for Chrome to pick it up.");
   const lines = [];
   const started = Date.now();
   let after = 0;
@@ -176,6 +179,7 @@ async function runBrowserTask(goal, ctx) {
     }
     if (status !== "pending" && status !== "running") break;
   }
+  bridge.unregisterTask(task.id);
   if (status === "pending" || status === "running") lines.push("Timed out waiting for the browser agent.");
   return `Browser task ${status}.\n${lines.join("\n")}`;
 }

@@ -82,6 +82,7 @@ async function runTurn(session, userText, hooks) {
           ...hooks.ctx,
           cfg: hooks.cfg,
           hubUrl: hooks.cfg.hubUrl,
+          redactor: session.redactor,
           progress: (text) => emit({ type: "action_progress", id: call.id, text }),
           image: (dataUrl) => emit({ type: "action_image", id: call.id, dataUrl }),
         };

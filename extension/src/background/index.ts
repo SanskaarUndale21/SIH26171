@@ -196,6 +196,59 @@ async function executeOnTab(tabId: number, message: ExtensionMessage): Promise<E
   }
 }
 
+
+// ---------- private channel to Jarvis (Jarvis/src/localbridge.js) ----------
+// For a task Jarvis handed over, questions and OKs go to Jarvis on THIS computer (127.0.0.1),
+// never through the planner server. Jarvis answers at once with a value it already holds
+// (e.g. the email the person told it), or asks the person by voice. The side panel prompt is
+// shown too; whichever gets an answer first wins.
+const JARVIS_LOCAL = "http://127.0.0.1:8766";
+
+interface JarvisAnswer {
+  answer?: string | null;
+  approved?: boolean | null;
+  auto?: boolean;
+}
+
+async function openJarvisPrompt(
+  taskId: string,
+  body: { requestId: string; kind: "ask" | "confirm"; text: string; placeholder?: string | null }
+): Promise<"none" | "pending" | JarvisAnswer> {
+  try {
+    const res = await fetch(`${JARVIS_LOCAL}/prompts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId, ...body }),
+      signal: AbortSignal.timeout(2000)
+    });
+    if (!res.ok) return "none";
+    const data = await res.json();
+    return data.status === "answered" ? { answer: data.answer, approved: data.approved, auto: data.auto } : "pending";
+  } catch {
+    return "none"; // Jarvis not running: the side panel prompt alone handles it
+  }
+}
+
+async function waitJarvisAnswer(requestId: string, isSettled: () => boolean): Promise<JarvisAnswer | null> {
+  while (!isSettled()) {
+    await sleep(700);
+    try {
+      const res = await fetch(`${JARVIS_LOCAL}/prompts/${requestId}`, { signal: AbortSignal.timeout(2000) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.status === "answered") return { answer: data.answer, approved: data.approved };
+      if (data.status === "cancelled") return null;
+    } catch {
+      // keep waiting; Jarvis may be busy
+    }
+  }
+  return null;
+}
+
+function cancelJarvisPrompt(requestId: string): void {
+  fetch(`${JARVIS_LOCAL}/prompts/${requestId}/cancel`, { method: "POST" }).catch(() => undefined);
+}
+
 // Deliberately re-derived from the CHOSEN action, not the request-level risk_tier field.
 // risk_tier (privacy/manifest.ts) is computed from the page's ambient structured summary --
 // e.g. "does this page have a submit button anywhere" -- before the planner has even picked
@@ -294,6 +347,9 @@ async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
   const tab = await getActiveTab();
   let tabId = tab.id!;
   const historyLines: string[] = [];
+  // Fields the person already declined to fill. Found live: after a skip the planner asked
+  // for the same field over and over; now a repeat is answered from here without asking.
+  const declined = new Set<string>();
   const runStarted = performance.now();
   const stepMetrics: StepMetrics[] = [];
   const done = (reason: "completed" | "max_steps" | "error" | "cancelled", message: string) =>
@@ -390,12 +446,37 @@ async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
     if (action.action === "ask_user") {
       const question = action.question?.trim() || "What value should I use here?";
       const fieldLabel = labelForSelector(action.target.selector, buildResponse.payload.structured_summary);
+      const fieldKey = action.target.selector ?? question;
+
+      if (declined.has(fieldKey)) {
+        const stepStatus = `the user already chose to leave ${fieldLabel ? `"${fieldLabel}"` : "this field"} empty; do not ask about it again, move on or finish`;
+        historyLines.push(`step ${step}: ask_user ("${question}") -> ${stepStatus}`);
+        broadcastAll(tabId, {
+          type: "TASK_STEP",
+          runId,
+          step,
+          status: `Skipped ${fieldLabel ? `"${fieldLabel}"` : "a field"} again, as you asked`,
+          action,
+          redactionManifest: buildResponse.payload.redaction_manifest,
+          metrics: stepMetric(0)
+        });
+        continue;
+      }
 
       // Answered this exact field before (by label, on any page)? Fill it straight away
       // instead of asking again -- still entirely local, still never sent to the planner.
       const fromTask = restoreFromTask(action.value, taskValues);
-      const savedAnswer = fromTask ?? (fieldLabel ? await getVaultAnswer(fieldLabel) : null);
+      const requestId = genId();
+      const bridgedTask = bridgedTasks.get(runId);
+      const hasPlaceholder = !!action.value?.match(PLACEHOLDER_RE);
+      let jarvis: "none" | "pending" | JarvisAnswer = "none";
+      if (!fromTask && bridgedTask && hasPlaceholder) {
+        jarvis = await openJarvisPrompt(bridgedTask, { requestId, kind: "ask", text: question, placeholder: action.value });
+      }
+      const fromJarvis = typeof jarvis === "object" ? jarvis.answer ?? null : null;
+      const savedAnswer = fromTask ?? fromJarvis ?? (fieldLabel ? await getVaultAnswer(fieldLabel) : null);
       if (savedAnswer) {
+        if (jarvis === "pending") cancelJarvisPrompt(requestId);
         const execStart = performance.now();
         const execResponse = (await executeOnTab(tabId, {
           type: "EXECUTE_ACTION",
@@ -403,7 +484,7 @@ async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
           target: action.target,
           value: savedAnswer
         })) as ExecuteActionResponse;
-        const where = fromTask ? "a value from your task" : "a saved answer";
+        const where = fromTask ? "a value from your task" : fromJarvis ? "a value Jarvis kept on this computer" : "a saved answer";
         const stepStatus = execResponse.ok
           ? `filled "${fieldLabel ?? action.target.selector ?? "the field"}" with ${where} (value not shared with the planner)`
           : `tried to fill "${fieldLabel ?? "the field"}" with ${where} but failed: ${execResponse.error ?? "unknown"}`;
@@ -422,10 +503,24 @@ async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
         continue;
       }
 
-      const requestId = genId();
+      if (bridgedTask && jarvis === "none") {
+        jarvis = await openJarvisPrompt(bridgedTask, { requestId, kind: "ask", text: question, placeholder: action.value });
+      }
+      const askJarvis = jarvis === "pending";
       const answer = await new Promise<string | null>((resolve) => {
-        pendingAskUser.set(requestId, resolve);
+        let settled = false;
+        const settle = (value: string | null, via: "panel" | "jarvis") => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+          if (via === "jarvis") broadcastAll(tabId, { type: "PROMPT_RESOLVED", runId, requestId, via });
+          else if (askJarvis) cancelJarvisPrompt(requestId);
+        };
+        pendingAskUser.set(requestId, (value) => settle(value, "panel"));
         broadcastAll(tabId, { type: "ASK_USER_REQUEST", runId, requestId, step, question });
+        if (askJarvis) {
+          void waitJarvisAnswer(requestId, () => settled).then((r) => r && settle(r.answer ?? null, "jarvis"));
+        }
       });
       pendingAskUser.delete(requestId);
 
@@ -447,7 +542,8 @@ async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
             : "asked the user and filled the field with their answer (value not shared with the planner)"
           : `asked the user but failed to fill the field: ${execResponse.error ?? "unknown"}`;
       } else {
-        stepStatus = "asked the user; they chose not to answer, field left as-is";
+        declined.add(fieldKey);
+        stepStatus = "asked the user; they chose to leave it empty, field left as-is (do not ask again)";
       }
 
       const execMs = performance.now() - execStart;
@@ -471,8 +567,26 @@ async function runAgentLoop(runId: string, rawGoal: string): Promise<void> {
     // without asking.
     if (isHighRiskAction(action)) {
       const requestId = genId();
+      const bridgedTask = bridgedTasks.get(runId);
+      const unfilled = unfilledSensitiveTypes(buildResponse.payload.redaction_manifest);
+      const confirmText =
+        `Next the browser will ${action.action}${action.target.selector ? ` ${action.target.selector}` : ""}, which can submit or pay.` +
+        (unfilled.length ? ` Still empty: ${unfilled.join(", ")}.` : "") +
+        " Go ahead?";
+      const jarvis = bridgedTask ? await openJarvisPrompt(bridgedTask, { requestId, kind: "confirm", text: confirmText }) : "none";
       const approved = await new Promise<boolean>((resolve) => {
-        pendingConfirms.set(requestId, resolve);
+        let settled = false;
+        const settle = (ok: boolean, via: "panel" | "jarvis") => {
+          if (settled) return;
+          settled = true;
+          resolve(ok);
+          if (via === "jarvis") broadcastAll(tabId, { type: "PROMPT_RESOLVED", runId, requestId, via });
+          else if (jarvis === "pending") cancelJarvisPrompt(requestId);
+        };
+        pendingConfirms.set(requestId, (ok) => settle(ok, "panel"));
+        if (jarvis === "pending") {
+          void waitJarvisAnswer(requestId, () => settled).then((r) => r && settle(r.approved === true, "jarvis"));
+        }
         broadcastAll(tabId, {
           type: "CONFIRM_REQUEST",
           runId,
