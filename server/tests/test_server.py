@@ -54,6 +54,7 @@ def test_jarvis_proxy_forces_server_model(monkeypatch):
                     return FakeCompletion()
 
     monkeypatch.setattr(planner, "_get_client", lambda: FakeClient)
+    monkeypatch.setattr(planner, "_get_jarvis_client", lambda: FakeClient)
     res = client.post(
         "/api/jarvis/chat/completions",
         json={"model": "ignored", "messages": [{"role": "user", "content": "hello"}], "stream": True},

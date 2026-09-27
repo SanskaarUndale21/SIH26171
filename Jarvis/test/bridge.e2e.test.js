@@ -78,7 +78,7 @@ test("Jarvis hands a browser task to the extension via the real server, placehol
 
   const server = spawn(python, ["-m", "uvicorn", "app.main:app", "--port", String(HUB_PORT)], {
     cwd: serverDir,
-    env: { ...process.env, PLANNER_BASE_URL: modelUrl, PLANNER_API_KEY: "x", PLANNER_MODEL: "fake-vlm", JARVIS_MODEL: "fake-llm" },
+    env: { ...process.env, PLANNER_BASE_URL: modelUrl, PLANNER_API_KEY: "x", PLANNER_MODEL: "fake-vlm", JARVIS_BASE_URL: modelUrl, JARVIS_API_KEY: "x", JARVIS_MODEL: "fake-llm" },
     stdio: "ignore",
     windowsHide: true,
   });

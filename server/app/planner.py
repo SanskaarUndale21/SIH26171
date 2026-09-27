@@ -103,22 +103,28 @@ SYSTEM_PROMPT = (
 )
 
 
-# Open-weights by default, as the problem statement asks. Llama 4 Scout is a vision model
-# (reads the sanitized screenshot) served by Groq and others; any OpenAI-compatible endpoint
-# works, including a self-hosted vLLM / Ollama / llama.cpp server.
+# Open-weights by default, as the problem statement asks. The planner needs a VISION model (it
+# reads the sanitized screenshot); Jarvis only needs text + tool calling. They can live on
+# different endpoints: PLANNER_* for the planner, JARVIS_BASE_URL / JARVIS_API_KEY for Jarvis
+# (falling back to the planner's). Any OpenAI-compatible endpoint works, including a local
+# Ollama / vLLM / llama.cpp server.
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_PLANNER_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-# Jarvis only needs text + tool calling, so it can use a larger text model on the same key.
-DEFAULT_JARVIS_MODEL = "llama-3.3-70b-versatile"
+# Groq retired its Llama 3 text models; gpt-oss-120b is open-weights (Apache 2.0).
+DEFAULT_JARVIS_MODEL = "openai/gpt-oss-120b"
 
 
 def planner_model() -> str:
     return os.environ.get("PLANNER_MODEL") or DEFAULT_PLANNER_MODEL
 
 
+def _jarvis_base_url() -> str | None:
+    return os.environ.get("JARVIS_BASE_URL") or _base_url()
+
+
 def jarvis_model() -> str:
     return os.environ.get("JARVIS_MODEL") or (
-        DEFAULT_JARVIS_MODEL if _base_url() == DEFAULT_BASE_URL else planner_model()
+        DEFAULT_JARVIS_MODEL if _jarvis_base_url() == DEFAULT_BASE_URL else planner_model()
     )
 
 
@@ -142,8 +148,24 @@ def planner_info() -> dict:
         "planner_model": planner_model(),
         "jarvis_model": jarvis_model(),
         "endpoint": _base_url() or "https://api.openai.com/v1",
+        "jarvis_endpoint": _jarvis_base_url() or "https://api.openai.com/v1",
         "open_weights": not is_closed_model(planner_model()),
+        "jarvis_open_weights": not is_closed_model(jarvis_model()),
     }
+
+
+_jarvis_client: OpenAI | None = None
+
+
+def _get_jarvis_client() -> OpenAI:
+    """Jarvis's text/tool model. Same client as the planner unless JARVIS_BASE_URL is set."""
+    global _jarvis_client
+    if not os.environ.get("JARVIS_BASE_URL"):
+        return _get_client()
+    if _jarvis_client is None:
+        api_key = os.environ.get("JARVIS_API_KEY") or os.environ.get("PLANNER_API_KEY") or "not-needed"
+        _jarvis_client = OpenAI(api_key=api_key, base_url=os.environ["JARVIS_BASE_URL"])
+    return _jarvis_client
 
 
 def _get_client() -> OpenAI:
@@ -300,6 +322,8 @@ def jarvis_completion(body: dict) -> dict:
         for m in kwargs.get("messages", [])
         if isinstance(m, dict)
     )
-    model = planner_model() if has_image else jarvis_model()
-    completion = _get_client().chat.completions.create(model=model, **kwargs)
+    if has_image:
+        completion = _get_client().chat.completions.create(model=planner_model(), **kwargs)
+    else:
+        completion = _get_jarvis_client().chat.completions.create(model=jarvis_model(), **kwargs)
     return completion.model_dump(exclude_none=True)
