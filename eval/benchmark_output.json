@@ -1,30 +1,370 @@
 {
-  "generatedAt": "2026-09-17T00:59:33.738Z",
-  "fusion": {
-    "manifestEntries": 7,
-    "truePositives": 5,
+  "generatedAt": "2026-09-27T08:08:56.766Z",
+  "detection": {
+    "items": 32,
+    "truePositives": 21,
+    "falseNegatives": 0,
+    "falsePositives": 2,
+    "trueNegatives": 9,
+    "recall": 1,
+    "precision": 0.9130434782608695,
+    "f1": 0.9545454545454545
+  },
+  "redactionPixels": {
+    "pixelPrecision": 0.9284293606945541,
+    "pixelRecall": 0.9911695315133131,
+    "meanIouOfCorrectMasks": 0.9875097389383104,
+    "maskedPixels": 253400,
+    "sensitivePixels": 237360
+  },
+  "textPii": {
+    "cases": 25,
+    "truePositives": 14,
     "falseNegatives": 0,
     "falsePositives": 0,
-    "trueNegatives": 2,
-    "recall": 1,
     "precision": 1,
-    "latencyMs": 0.852
+    "recall": 1,
+    "perType": {
+      "email": {
+        "tp": 2,
+        "fn": 0,
+        "fp": 0
+      },
+      "phone_number": {
+        "tp": 3,
+        "fn": 0,
+        "fp": 0
+      },
+      "card_number": {
+        "tp": 2,
+        "fn": 0,
+        "fp": 0
+      },
+      "aadhaar": {
+        "tp": 2,
+        "fn": 0,
+        "fp": 0
+      },
+      "pan": {
+        "tp": 1,
+        "fn": 0,
+        "fp": 0
+      },
+      "ip_address": {
+        "tp": 1,
+        "fn": 0,
+        "fp": 0
+      },
+      "secret": {
+        "tp": 3,
+        "fn": 0,
+        "fp": 0
+      }
+    },
+    "failures": []
   },
-  "regexPii": {
-    "cases": 4,
-    "truePositiveMatches": 3,
-    "falseNegativeMatches": 0,
-    "falsePositiveCardMatches": 0,
-    "latencyMs": 1.029
+  "latency": {
+    "fusionMsPerPage": 0.088,
+    "regexMsPerText": 0.1024
   },
+  "items": [
+    {
+      "id": "#email",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "email",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#password",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "password_field",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#confirm_password",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "password_field",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#mobile",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "phone_number",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#alt_mobile",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "phone_number",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#aadhaar",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "aadhaar",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#pan",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "pan",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#dob",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "date_of_birth",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#bank_account",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "bank_account",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#card",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "card_number",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#cvv",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "secret",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#otp",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "secret",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#address",
+      "kind": "field",
+      "expected": "mask",
+      "got": "masked",
+      "type": "address",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#fullname",
+      "kind": "field (vision only)",
+      "expected": "mask",
+      "got": "masked",
+      "type": "person_name",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "#father_name",
+      "kind": "field (vision only)",
+      "expected": "mask",
+      "got": "masked",
+      "type": "person_name",
+      "iou": 1,
+      "ok": true
+    },
+    {
+      "id": "profile_photo",
+      "kind": "screen region",
+      "expected": "mask",
+      "got": "masked",
+      "type": "face",
+      "iou": 0.9114285714285715,
+      "ok": true
+    },
+    {
+      "id": "thumbnail_face",
+      "kind": "screen region",
+      "expected": "mask",
+      "got": "masked",
+      "type": "face",
+      "iou": 0.8711111111111111,
+      "ok": true
+    },
+    {
+      "id": "printed_mobile",
+      "kind": "screen region",
+      "expected": "mask",
+      "got": "masked",
+      "type": "phone_number",
+      "iou": 0.9833333333333333,
+      "ok": true
+    },
+    {
+      "id": "printed_email",
+      "kind": "screen region",
+      "expected": "mask",
+      "got": "masked",
+      "type": "email",
+      "iou": 0.9928571428571429,
+      "ok": true
+    },
+    {
+      "id": "printed_aadhaar",
+      "kind": "screen region",
+      "expected": "mask",
+      "got": "masked",
+      "type": "aadhaar",
+      "iou": 0.9923076923076923,
+      "ok": true
+    },
+    {
+      "id": "printed_card",
+      "kind": "screen region",
+      "expected": "mask",
+      "got": "masked",
+      "type": "card_number",
+      "iou": 0.9866666666666667,
+      "ok": true
+    },
+    {
+      "id": "#course",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#state",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#category",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#gender",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#college",
+      "kind": "field",
+      "expected": "keep",
+      "got": "MASKED (FP)",
+      "type": "",
+      "iou": 0,
+      "ok": false
+    },
+    {
+      "id": "#percentage",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#pincode",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#company",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#sop",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "#search",
+      "kind": "field",
+      "expected": "keep",
+      "got": "kept",
+      "type": "",
+      "iou": 0,
+      "ok": true
+    },
+    {
+      "id": "state_emblem",
+      "kind": "screen region",
+      "expected": "keep",
+      "got": "MASKED (FP)",
+      "type": "",
+      "iou": 0,
+      "ok": false
+    }
+  ],
   "manifest": [
     {
       "type": "email",
       "bbox": [
         40,
-        100,
-        300,
-        24
+        200,
+        420,
+        30
       ],
       "confidence": 0.99,
       "method": "blackbox"
@@ -32,21 +372,21 @@
     {
       "type": "password_field",
       "bbox": [
-        40,
-        140,
-        300,
-        24
+        520,
+        200,
+        420,
+        30
       ],
       "confidence": 0.99,
       "method": "blackbox"
     },
     {
-      "type": "card_number",
+      "type": "password_field",
       "bbox": [
-        40,
-        180,
-        300,
-        24
+        520,
+        250,
+        420,
+        30
       ],
       "confidence": 0.99,
       "method": "blackbox"
@@ -55,9 +395,108 @@
       "type": "phone_number",
       "bbox": [
         40,
-        220,
+        250,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "phone_number",
+      "bbox": [
+        40,
         300,
-        24
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "aadhaar",
+      "bbox": [
+        520,
+        300,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "pan",
+      "bbox": [
+        40,
+        350,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "date_of_birth",
+      "bbox": [
+        520,
+        350,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "bank_account",
+      "bbox": [
+        40,
+        400,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "card_number",
+      "bbox": [
+        520,
+        400,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "secret",
+      "bbox": [
+        40,
+        450,
+        120,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "secret",
+      "bbox": [
+        520,
+        450,
+        420,
+        30
+      ],
+      "confidence": 0.99,
+      "method": "blackbox"
+    },
+    {
+      "type": "address",
+      "bbox": [
+        40,
+        500,
+        420,
+        70
       ],
       "confidence": 0.99,
       "method": "blackbox"
@@ -66,33 +505,121 @@
       "type": "person_name",
       "bbox": [
         40,
-        60,
-        300,
-        24
+        140,
+        420,
+        30
       ],
       "confidence": 0.72,
       "method": "blackbox"
     },
     {
+      "type": "person_name",
+      "bbox": [
+        520,
+        140,
+        420,
+        30
+      ],
+      "confidence": 0.64,
+      "method": "blackbox"
+    },
+    {
       "type": "face",
       "bbox": [
-        400,
-        60,
-        120,
-        120
+        822,
+        44,
+        116,
+        132
       ],
       "confidence": 0.93,
+      "method": "blackbox"
+    },
+    {
+      "type": "face",
+      "bbox": [
+        522,
+        872,
+        56,
+        56
+      ],
+      "confidence": 0.38,
       "method": "blackbox"
     },
     {
       "type": "phone_number",
       "bbox": [
         40,
-        260,
+        90,
+        236,
+        22
+      ],
+      "confidence": 0.81,
+      "method": "blackbox"
+    },
+    {
+      "type": "email",
+      "bbox": [
+        300,
+        90,
+        278,
+        22
+      ],
+      "confidence": 0.8200000000000001,
+      "method": "blackbox"
+    },
+    {
+      "type": "aadhaar",
+      "bbox": [
+        40,
+        1060,
+        258,
+        22
+      ],
+      "confidence": 0.77,
+      "method": "blackbox"
+    },
+    {
+      "type": "card_number",
+      "bbox": [
+        320,
+        1060,
+        296,
+        22
+      ],
+      "confidence": 0.83,
+      "method": "blackbox"
+    },
+    {
+      "type": "phone_number",
+      "bbox": [
         60,
+        820,
+        120,
         20
       ],
       "confidence": 0.30000000000000004,
+      "method": "blackbox"
+    },
+    {
+      "type": "person_name",
+      "bbox": [
+        40,
+        700,
+        420,
+        30
+      ],
+      "confidence": 0.35,
+      "method": "blackbox"
+    },
+    {
+      "type": "face",
+      "bbox": [
+        42,
+        22,
+        56,
+        56
+      ],
+      "confidence": 0.31000000000000005,
       "method": "blackbox"
     }
   ]

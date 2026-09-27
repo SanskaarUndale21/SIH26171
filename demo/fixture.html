@@ -2,56 +2,129 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Fusion Agent Demo Fixture</title>
+  <title>Demo Scholarship Portal (test page)</title>
+  <!-- Same field ids as eval/fixture.ts, so a live run here lines up with the eval numbers.
+       All personal data on this page is fake test data. -->
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 460px; margin: 40px auto; }
-    label { display: block; margin-top: 12px; font-size: 14px; }
-    input, textarea, select { width: 100%; box-sizing: border-box; padding: 6px; margin-top: 4px; font-family: inherit; }
-    img { margin-top: 12px; border-radius: 50%; }
-    button { margin-top: 20px; padding: 8px 16px; }
-    #result { margin-top: 12px; font-weight: bold; }
+    :root { --ink: #1f2937; --muted: #6b7280; --line: #d1d5db; --brand: #1e3a8a; --bg: #f4f6fb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+    .top { background: #fff; border-bottom: 1px solid var(--line); padding: 14px 32px; display: flex; align-items: center; gap: 14px; }
+    .top h1 { font-size: 18px; margin: 0; color: var(--brand); }
+    .top small { color: var(--muted); display: block; }
+    .top input { margin-left: auto; width: 240px; }
+    .who { background: #eef2ff; padding: 8px 32px; font-size: 13px; color: #312e81; }
+    main { max-width: 980px; margin: 24px auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 24px 32px 32px; position: relative; }
+    main h2 { margin: 0 0 4px; font-size: 20px; }
+    main > p { margin: 0 0 18px; color: var(--muted); }
+    .photo { position: absolute; top: 24px; right: 32px; text-align: center; font-size: 11px; color: var(--muted); }
+    .photo img { width: 110px; height: 130px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 28px; margin-right: 150px; }
+    .grid.full { margin-right: 0; }
+    fieldset { border: 0; padding: 0; margin: 22px 0 0; }
+    legend { font-weight: 600; color: var(--brand); margin-bottom: 8px; font-size: 15px; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    input, select, textarea { font: inherit; color: var(--ink); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    textarea { resize: vertical; }
+    .span2 { grid-column: span 2; }
+    .docs { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .docs img { width: 56px; height: 56px; object-fit: cover; border-radius: 50%; }
+    .onfile { margin-top: 18px; padding: 10px 12px; background: #f9fafb; border: 1px dashed var(--line); border-radius: 8px; font-size: 13px; }
+    .row { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+    button { font: inherit; font-weight: 600; background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 10px 20px; cursor: pointer; }
+    #result { margin-top: 14px; font-weight: 600; color: #047857; }
   </style>
 </head>
 <body>
-  <h1>Create your account</h1>
-  <!-- Same field shape as eval/fixture.ts, so a live run here should match the eval numbers. -->
-  <form id="registration-form">
-    <label>Full name
-      <input id="fullname" type="text" name="fullname" placeholder="Jane Doe" autocomplete="name" />
-    </label>
-    <label>Email
-      <input id="email" type="email" name="email" placeholder="jane@example.com" autocomplete="email" />
-    </label>
-    <label>Password
-      <input id="password" type="password" name="password" placeholder="********" autocomplete="new-password" />
-    </label>
-    <label>Card number
-      <input id="card" type="text" name="cc-number" placeholder="4111 1111 1111 1111" autocomplete="cc-number" />
-    </label>
-    <label>Phone
-      <input id="phone" type="tel" name="phone" placeholder="+1 555 123 4567" autocomplete="tel" />
-    </label>
-    <label>Short bio (control field, must NOT be redacted)
-      <textarea id="bio" name="bio" placeholder="Tell us about yourself"></textarea>
-    </label>
-    <label>Favorite color (control field, must NOT be redacted)
-      <select id="favorite_color" name="favorite_color">
-        <option value="blue">Blue</option>
-        <option value="green">Green</option>
-        <option value="red">Red</option>
-      </select>
-    </label>
+  <div class="top">
+    <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="none" stroke="#1e3a8a" stroke-width="3"/><circle cx="22" cy="22" r="6" fill="#1e3a8a"/></svg>
+    <div>
+      <h1>Demo Scholarship Portal</h1>
+      <small>Test page for the SIH 26171 privacy agent. All data here is fake.</small>
+    </div>
+    <input id="search" type="search" name="q" placeholder="Search schemes" />
+  </div>
+  <div class="who">Logged in as <b>priya.sharma@example.org</b> · Registered mobile <b>98765 43210</b></div>
 
-    <img id="profile-photo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Head_shoulders_mirrored.png/220px-Head_shoulders_mirrored.png" width="120" alt="profile" />
+  <main>
+    <h2>Post-matric scholarship application 2026-27</h2>
+    <p>Fill in every section. Fields marked with a lock are sensitive.</p>
+    <div class="photo">
+      <img id="profile-photo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Head_shoulders_mirrored.png/220px-Head_shoulders_mirrored.png" alt="Applicant photo" />
+      Applicant photo
+    </div>
 
-    <button type="submit" id="submit">Submit</button>
-  </form>
-  <div id="result"></div>
+    <form id="application">
+      <div class="grid">
+        <label>Full name<input id="fullname" type="text" name="applicant" placeholder="Full name" /></label>
+        <label>Father's / guardian's name<input id="father_name" type="text" name="father" placeholder="Father's / guardian's name" /></label>
+      </div>
+
+      <fieldset>
+        <legend>Account</legend>
+        <div class="grid full">
+          <label>Email<input id="email" type="email" name="email" placeholder="Email address" /></label>
+          <label>&#128274; Password<input id="password" type="password" name="password" placeholder="Create password" /></label>
+          <label>Mobile<input id="mobile" type="tel" name="mobile" placeholder="Mobile number" /></label>
+          <label>&#128274; Confirm password<input id="confirm_password" type="password" name="confirm_password" placeholder="Confirm password" /></label>
+          <label>Alternate mobile<input id="alt_mobile" type="text" name="alt_mobile" placeholder="Alternate mobile number" /></label>
+          <label>&#128274; Aadhaar<input id="aadhaar" type="text" name="aadhaar_no" placeholder="12-digit Aadhaar number" /></label>
+          <label>&#128274; PAN<input id="pan" type="text" name="pan" placeholder="PAN" /></label>
+          <label>Date of birth<input id="dob" type="date" name="dob" placeholder="Date of birth" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Bank and fee payment</legend>
+        <div class="grid full">
+          <label>&#128274; Bank account number<input id="bank_account" type="text" name="account_number" placeholder="Bank account number" /></label>
+          <label>&#128274; Card number<input id="card" type="text" name="cc-number" placeholder="Card number (fee payment)" /></label>
+          <label>&#128274; CVV<input id="cvv" type="text" name="cvv" placeholder="CVV" maxlength="4" /></label>
+          <label>&#128274; OTP<input id="otp" type="text" name="otp" placeholder="OTP sent to mobile" /></label>
+          <label class="span2">Permanent address<textarea id="address" name="address" rows="2" placeholder="Permanent address"></textarea></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Education</legend>
+        <div class="grid full">
+          <label>Course
+            <select id="course" name="course"><option>B.Tech</option><option>B.Sc</option><option>B.Com</option><option>BA</option></select>
+          </label>
+          <label>State
+            <select id="state" name="state"><option>Maharashtra</option><option>Gujarat</option><option>Karnataka</option><option>Tamil Nadu</option></select>
+          </label>
+          <label>Category
+            <select id="category" name="category"><option>General</option><option>OBC</option><option>SC</option><option>ST</option></select>
+          </label>
+          <label>Gender
+            <select id="gender" name="gender"><option>Female</option><option>Male</option><option>Other</option></select>
+          </label>
+          <label>College / institute<input id="college" type="text" name="college" placeholder="College / institute name" /></label>
+          <label>Last exam percentage<input id="percentage" type="number" name="percentage" placeholder="Last exam percentage" /></label>
+          <label>Pincode<input id="pincode" type="text" name="pincode" placeholder="Pincode" /></label>
+          <label>Parent's employer<input id="company" type="text" name="company" placeholder="Parent's employer / company" /></label>
+          <label class="span2">Statement<textarea id="sop" name="statement" rows="3" placeholder="Why do you need this scholarship?"></textarea></label>
+        </div>
+        <div class="docs">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Head_shoulders_mirrored.png/120px-Head_shoulders_mirrored.png" alt="ID card thumbnail" />
+          ID card photo uploaded
+        </div>
+      </fieldset>
+
+      <div class="onfile">On file: Aadhaar <b>2345 6789 0124</b> · Fee card <b>4111 1111 1111 1111</b></div>
+
+      <div class="row">
+        <button type="submit" id="submit">Submit application</button>
+      </div>
+      <div id="result"></div>
+    </form>
+  </main>
 
   <script>
-    document.getElementById("registration-form").addEventListener("submit", (e) => {
+    document.getElementById("application").addEventListener("submit", (e) => {
       e.preventDefault();
-      document.getElementById("result").textContent = "Form submitted successfully.";
+      document.getElementById("result").textContent = "Application submitted. Reference SCH-2026-0042.";
     });
   </script>
 </body>
