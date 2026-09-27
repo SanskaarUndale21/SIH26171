@@ -225,10 +225,16 @@ async function lookAtScreen(question, ctx) {
   }
   const counts = {};
   for (const m of result.manifest) counts[m.type] = (counts[m.type] || 0) + 1;
-  const kinds = Object.entries(counts).map(([t, n]) => `${n} ${t}`).join(", ") || "nothing sensitive found";
+  const names = { person_name: "name", person: "person", phone: "phone", email: "email", card: "card", aadhaar: "aadhaar", pan: "pan", secret: "secret", ip: "ip address" };
+  const kinds = Object.entries(counts).map(([t, n]) => `${names[t] || t}${n > 1 ? ` ×${n}` : ""}`).join(", ");
   const preview = await sharp(result.masked).resize({ width: 640 }).jpeg({ quality: 70 }).toBuffer();
   ctx.image(`data:image/jpeg;base64,${preview.toString("base64")}`);
-  ctx.progress(`Masked ${result.manifest.length} region(s) on-device in ${(result.timings.totalMs / 1000).toFixed(1)} s: ${kinds}. Sending only the masked image.`);
+  const secs = (result.timings.totalMs / 1000).toFixed(1);
+  ctx.progress(
+    result.manifest.length
+      ? `Masked ${result.manifest.length} ${result.manifest.length === 1 ? "area" : "areas"} on this computer in ${secs} s (${kinds}). Only the masked image is sent.`
+      : `Checked the screen on this computer in ${secs} s and found nothing private to mask.`
+  );
 
   const outgoing = await sharp(result.masked).resize({ width: 1600, withoutEnlargement: true }).png().toBuffer();
   const msg = await chatCompletion(ctx.cfg, [

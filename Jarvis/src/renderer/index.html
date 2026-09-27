@@ -2,40 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:" />
   <title>Jarvis</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="bar">
     <div class="brand">
-      <img src="../../assets/icon-512.png" alt="" class="logo" />
+      <svg class="glyph" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="2" y="2" width="28" height="28" rx="8" class="glyph-bg" />
+        <rect x="8" y="10" width="16" height="4" rx="1" class="glyph-line" />
+        <rect x="8" y="18" width="11" height="4" rx="1" class="glyph-mask" />
+      </svg>
       <div>
         <div class="name">Jarvis</div>
-        <div class="status" id="status"><span class="dot"></span><span id="statusText">Ready</span></div>
+        <div class="status" id="status"><span id="statusText">Ready</span></div>
       </div>
     </div>
     <div class="actions">
-      <button class="icon-btn" id="speak" title="Spoken replies on/off" aria-label="Spoken replies" aria-pressed="true">
+      <button class="icon-btn" id="speak" title="Read replies aloud" aria-label="Read replies aloud" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
       </button>
-      <button class="icon-btn" id="newChat" title="New chat" aria-label="New chat">
+      <button class="icon-btn" id="newChat" title="New conversation" aria-label="New conversation">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       </button>
       <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       </button>
       <button class="icon-btn" id="hide" title="Hide (Ctrl+Shift+J)" aria-label="Hide">
-        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg>
       </button>
     </div>
   </header>
 
   <main id="log" aria-live="polite">
     <div class="empty" id="empty">
-      <img src="../../assets/icon-512.png" alt="" />
-      <h1>How can I help?</h1>
-      <p>Your voice, your screen and personal details are processed on this computer. Only masked data reaches the model, and I ask before every risky action.</p>
+      <p class="lede">Ask by typing or with the mic. Your voice, your screen and your personal details are handled on this computer first.</p>
+      <ul class="legend">
+        <li><span class="swatch local"></span>Done on this computer</li>
+        <li><span class="swatch remote"></span>Sent out, or waiting for your OK</li>
+        <li><span class="mask static">email</span>Masked before anything is sent</li>
+      </ul>
+      <p class="try">Try one of these</p>
       <div class="chips">
         <button class="chip">Fill in the scholarship form in Chrome. My email is priya.sharma@example.org</button>
         <button class="chip">What's on my screen right now?</button>
@@ -46,38 +54,41 @@
   </main>
 
   <form id="composer">
-    <button type="button" id="micBtn" title="Push to talk (on-device Whisper)" aria-label="Voice input">
+    <button type="button" id="micBtn" title="Click to talk, click again to stop. Transcribed on this computer." aria-label="Voice input">
       <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
     </button>
-    <textarea id="input" rows="1" placeholder="Ask Jarvis, or press the mic..." autocomplete="off"></textarea>
+    <label class="sr" for="input">Message Jarvis</label>
+    <textarea id="input" rows="1" placeholder="Ask Jarvis" autocomplete="off"></textarea>
     <button type="submit" id="sendBtn" aria-label="Send">
-      <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
     </button>
   </form>
 
   <section id="settings" class="sheet" hidden>
-    <div class="sheet-card">
-      <h2>Settings</h2>
-      <label>Model endpoint (OpenAI-compatible; default is the SIH server)
+    <div class="sheet-card" role="dialog" aria-labelledby="settingsTitle">
+      <h2 id="settingsTitle">Settings</h2>
+      <label>Model endpoint
         <input id="cfgBase" type="url" spellcheck="false" />
+        <span class="help">Any OpenAI-compatible address. The default is the SIH server, which holds the key.</span>
       </label>
-      <label>SIH server (browser task bridge)
+      <label>SIH server
         <input id="cfgHub" type="url" spellcheck="false" />
+        <span class="help">Used to hand tasks to the browser extension.</span>
       </label>
       <label>Model
         <input id="cfgModel" type="text" spellcheck="false" />
       </label>
       <label>API key
         <input id="cfgKey" type="password" spellcheck="false" />
+        <span class="help">Stored encrypted on this computer and never shown again.</span>
       </label>
       <label class="check">
         <input id="cfgAuto" type="checkbox" />
-        <span>Auto-approve low-risk actions (open URL, clipboard)</span>
+        <span>Open links and use the clipboard without asking</span>
       </label>
-      <p class="hint">The key is stored encrypted on this machine and never shown back.</p>
       <div class="row">
         <button type="button" class="ghost" id="cfgCancel">Cancel</button>
-        <button type="button" class="primary" id="cfgSave">Save</button>
+        <button type="button" class="primary" id="cfgSave">Save settings</button>
       </div>
     </div>
   </section>

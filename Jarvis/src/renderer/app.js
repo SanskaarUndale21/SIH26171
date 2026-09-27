@@ -14,15 +14,18 @@ let typingEl = null;
 let busy = false;
 
 const TOOL_LABELS = {
-  browser_task: "Browser agent (Chrome)",
-  look_at_screen: "Look at screen (masked on-device)",
-  open_url: "Open URL",
-  open_app: "Launch app",
-  run_command: "Run command",
-  type_text: "Type text",
-  read_clipboard: "Read clipboard",
-  write_clipboard: "Write clipboard",
+  browser_task: "Hand this to the browser agent",
+  look_at_screen: "Look at your screen",
+  open_url: "Open a link",
+  open_app: "Open an app",
+  run_command: "Run a command",
+  type_text: "Type into your last window",
+  read_clipboard: "Read your clipboard",
+  write_clipboard: "Copy to your clipboard",
 };
+
+// Plain names for the placeholder types in the black bars.
+const MASK_NAMES = { EMAIL: "email", PHONE: "phone", CARD: "card", AADHAAR: "aadhaar", PAN: "pan", SECRET: "secret", IP: "ip address" };
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -50,7 +53,7 @@ function setStatus(text, mode = "") {
 function setBusy(on) {
   busy = on;
   sendBtn.disabled = on;
-  if (on) setStatus("Working...", "busy");
+  if (on) setStatus("Working", "busy");
 }
 
 function showTyping() {
@@ -64,14 +67,34 @@ function hideTyping() {
   typingEl = null;
 }
 
-function shieldIcon() {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  const p = document.createElementNS(ns, "path");
-  p.setAttribute("d", "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z");
-  svg.appendChild(p);
-  return svg;
+// "Masked before sending: [email] [phone ×2]" as redaction bars.
+function maskNote(where, kinds, count) {
+  const note = el("div", "note");
+  note.appendChild(el("span", "", where === "message" ? "Masked before sending:" : "Masked in the result before the model saw it:"));
+  kinds.forEach((k, i) => {
+    const bar = el("span", "mask", MASK_NAMES[k] || k.toLowerCase());
+    bar.style.animationDelay = `${i * 60}ms`;
+    note.appendChild(bar);
+  });
+  note.title = `${count} private item${count > 1 ? "s" : ""} replaced with placeholders on this computer`;
+  return note;
+}
+
+// Placeholders such as [EMAIL_1] are shown as the redaction bars they stand for, so what
+// leaves the computer reads the same way everywhere in the app.
+const PLACEHOLDER = /\[(EMAIL|PHONE|CARD|AADHAAR|PAN|SECRET|IP)_(\d+)\]/g;
+function withMasks(node, text) {
+  let last = 0;
+  for (const m of String(text).matchAll(PLACEHOLDER)) {
+    node.append(text.slice(last, m.index));
+    const bar = el("span", "mask static", MASK_NAMES[m[1]] || m[1].toLowerCase());
+    if (m[2] !== "1") bar.appendChild(el("span", "n", m[2]));
+    bar.title = `${m[0]}: the real value stays on this computer`;
+    node.appendChild(bar);
+    last = m.index + m[0].length;
+  }
+  node.append(String(text).slice(last));
+  return node;
 }
 
 function describeArgs(name, args) {
@@ -88,25 +111,24 @@ function describeArgs(name, args) {
 }
 
 function actionCard(action, auto) {
-  const card = el("div", `action ${action.risk}`);
-  const head = el("div", "action-head");
-  head.appendChild(el("span", "action-name", TOOL_LABELS[action.name] || action.name));
-  head.appendChild(el("span", `risk ${action.risk}`, action.risk === "high" ? "needs approval" : "low risk"));
-  card.appendChild(head);
-  card.appendChild(el("pre", "", describeArgs(action.name, action.args)));
+  const card = el("div", auto ? "action" : "action waiting");
+  card.appendChild(el("p", "action-name", TOOL_LABELS[action.name] || action.name));
+  const sub = el("p", "action-sub", auto ? "Ran without asking, as set in Settings" : "Waits for your OK. You can also say yes or no.");
+  card.appendChild(sub);
+  card.appendChild(withMasks(el("pre"), describeArgs(action.name, action.args)));
 
-  if (auto) {
-    card.appendChild(el("div", "verdict", "Auto-approved (low risk)"));
-  } else {
+  if (!auto) {
     const buttons = el("div", "buttons");
     const allow = el("button", "primary", "Allow");
-    const deny = el("button", "deny", "Deny");
+    const deny = el("button", "deny", "Don't allow");
     const answer = (ok) => {
       pendingAnswer = null;
       window.jarvis.answer(action.id, ok);
       buttons.remove();
-      card.appendChild(el("div", `verdict ${ok ? "ok" : "no"}`, ok ? "Allowed" : "Denied"));
-      setStatus(ok ? "Running..." : "Working...", "busy");
+      card.classList.remove("waiting");
+      sub.textContent = ok ? "You allowed this." : "You didn't allow this.";
+      if (!ok) sub.classList.add("verdict", "no");
+      setStatus(ok ? "Working" : "Ready", ok ? "busy" : "");
     };
     allow.onclick = () => answer(true);
     deny.onclick = () => answer(false);
@@ -115,7 +137,7 @@ function actionCard(action, auto) {
     };
     buttons.append(allow, deny);
     card.appendChild(buttons);
-    setStatus("Waiting for your approval", "busy");
+    setStatus("Waiting for your OK", "busy");
     setTimeout(() => allow.focus(), 0);
   }
   actionCards.set(action.id, card);
@@ -129,7 +151,7 @@ function actionImage({ id, dataUrl }) {
   img.src = dataUrl;
   img.alt = "Screenshot after on-device masking";
   card.appendChild(img);
-  card.appendChild(el("div", "img-caption", "What the model receives: black boxes were masked on this computer."));
+  card.appendChild(el("p", "img-caption", "This is exactly what the model receives. The black boxes were masked on this computer."));
   scroll();
 }
 
@@ -141,8 +163,8 @@ function actionProgress({ id, text }) {
     list = el("ul", "progress");
     card.appendChild(list);
   }
-  list.appendChild(el("li", "", text));
-  setStatus("Browser agent working...", "busy");
+  list.appendChild(withMasks(el("li"), text));
+  setStatus("Working", "busy");
   scroll();
 }
 
@@ -150,7 +172,7 @@ function actionResult({ id, ok, result }) {
   const card = actionCards.get(id);
   if (!card || !ok) return;
   const det = el("details", "result");
-  det.appendChild(el("summary", "", "Output"));
+  det.appendChild(el("summary", "", "Show the result"));
   det.appendChild(el("pre", "", result));
   card.appendChild(det);
   scroll();
@@ -161,14 +183,10 @@ window.jarvis.on("agent:event", (ev) => {
     case "thinking":
       showTyping();
       break;
-    case "redacted": {
+    case "redacted":
       hideTyping();
-      const note = el("div", "note");
-      note.appendChild(shieldIcon());
-      note.appendChild(document.createTextNode(`${ev.count} private item${ev.count > 1 ? "s" : ""} masked in ${ev.where} (${ev.kinds.join(", ").toLowerCase()})`));
-      add(note);
+      add(maskNote(ev.where, ev.kinds, ev.count));
       break;
-    }
     case "action":
       hideTyping();
       actionCard(ev.action, ev.auto);
@@ -212,6 +230,7 @@ async function submit(text) {
 function autosize() {
   input.style.height = "auto";
   input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+  input.style.overflowY = input.scrollHeight > 140 ? "auto" : "hidden";
 }
 
 $("composer").addEventListener("submit", (e) => {
