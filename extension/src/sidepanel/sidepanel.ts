@@ -1,4 +1,4 @@
-import type { NextActionResponse, RedactionEntry, RiskTier } from "../types";
+import type { NextActionResponse, RedactionEntry, RiskTier, RunMetrics, StepMetrics } from "../types";
 import type { ExtensionMessage } from "../messages";
 import { clearVault } from "../privacy/vault";
 
@@ -8,6 +8,9 @@ const sendButton = document.getElementById("send") as HTMLButtonElement;
 const micButton = document.getElementById("mic") as HTMLButtonElement;
 const voiceToggle = document.getElementById("voiceToggle") as HTMLButtonElement;
 const clearVaultButton = document.getElementById("clearVault") as HTMLButtonElement;
+const serverStatusEl = document.getElementById("serverStatus") as HTMLDivElement;
+
+const SERVER_BASE = "http://localhost:8100";
 
 let activeRunId: string | null = null;
 let activeThinkingEl: HTMLDivElement | null = null;
@@ -65,6 +68,67 @@ function appendActionDetail(container: HTMLDivElement, action: NextActionRespons
   details.appendChild(summary);
   details.appendChild(pre);
   container.appendChild(details);
+}
+
+function fmtMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+// One compact line per step: where the time went and what it cost on this machine. Latency and
+// client resource use are scored metrics, so they're shown live, not only in a log.
+function appendStepMetrics(container: HTMLDivElement, m: StepMetrics): void {
+  const d = m.context.detectors;
+  const line = document.createElement("div");
+  line.className = "metrics";
+  const parts = [
+    `capture ${fmtMs(m.captureMs)}`,
+    `on-device ${fmtMs(m.context.totalMs)}`,
+    `planner ${fmtMs(m.plannerMs)}`,
+    `act ${fmtMs(m.execMs)}`
+  ];
+  line.textContent = `${fmtMs(m.stepMs)} total · ${parts.join(" · ")}`;
+  const detail = document.createElement("div");
+  detail.className = "metrics sub";
+  const heap = m.context.heapMB !== null ? `heap ${m.context.heapMB} MB · ` : "";
+  detail.textContent =
+    `${heap}${m.context.webgpu ? "WebGPU" : "WASM"} · sent ${m.payloadKB.toFixed(0)} KB · ` +
+    `ocr ${fmtMs(d.ocrMs)}, face ${fmtMs(d.facesMs)}, yolo ${fmtMs(d.yoloMs)}, florence ${fmtMs(d.florenceMs)}, ner ${fmtMs(d.nerMs)}`;
+  container.appendChild(line);
+  container.appendChild(detail);
+}
+
+function addRunSummary(m: RunMetrics): void {
+  if (!m.steps) return;
+  const el = document.createElement("div");
+  el.className = "msg summary";
+  const title = document.createElement("div");
+  title.className = "summary-title";
+  title.textContent = "Run summary";
+  el.appendChild(title);
+  const grid = document.createElement("div");
+  grid.className = "summary-grid";
+  const cells: [string, string][] = [
+    ["Steps", String(m.steps)],
+    ["Total time", fmtMs(m.totalMs)],
+    ["Avg step", fmtMs(m.avgStepMs)],
+    ["Avg on-device", fmtMs(m.avgPerceptionMs)],
+    ["Avg planner", fmtMs(m.avgPlannerMs)],
+    ["Peak heap", m.peakHeapMB !== null ? `${m.peakHeapMB} MB` : "n/a"],
+    ["Regions masked", String(m.totalRedactions)],
+    ["Sent to server", `${m.sentKB.toFixed(0)} KB`]
+  ];
+  for (const [k, v] of cells) {
+    const cell = document.createElement("div");
+    const val = document.createElement("b");
+    val.textContent = v;
+    const key = document.createElement("span");
+    key.textContent = k;
+    cell.append(val, key);
+    grid.appendChild(cell);
+  }
+  el.appendChild(grid);
+  messagesEl.appendChild(el);
+  scrollToBottom();
 }
 
 function setRunning(running: boolean): void {
@@ -228,6 +292,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
     const agentMsg = addMessage("agent", `Step ${message.step}: ${message.status}`);
     speak(message.status);
     if (message.redactionManifest?.length) appendManifestChips(agentMsg, message.redactionManifest);
+    if (message.metrics) appendStepMetrics(agentMsg, message.metrics);
     if (message.action) appendActionDetail(agentMsg, message.action);
     activeThinkingEl = addMessage("system", "Working...");
     scrollToBottom();
@@ -238,7 +303,16 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
     if (message.runId !== activeRunId) return;
     setRunning(false);
     addMessage(message.reason === "error" ? "error" : "system", message.message);
+    if (message.metrics) addRunSummary(message.metrics);
     speak(message.message);
+    return;
+  }
+
+  if (message.type === "TASK_STARTED") {
+    // A run this panel didn't start itself: handed over from the Jarvis desktop app (picked up
+    // by the background's own alarm, or by this panel's poll below).
+    if (message.source !== "jarvis" || activeRunId === message.runId) return;
+    adoptRemoteRun(message.runId, message.taskGoal);
     return;
   }
 
@@ -396,6 +470,44 @@ goalInput.addEventListener("keydown", (e) => {
     runTask();
   }
 });
+
+function adoptRemoteRun(runId: string, taskGoal: string): void {
+  if (activeRunId === runId) return;
+  const el = addMessage("user", taskGoal);
+  const tag = document.createElement("div");
+  tag.className = "from-jarvis";
+  tag.textContent = "from Jarvis";
+  el.prepend(tag);
+  setRunning(true);
+  activeRunId = runId;
+  activeThinkingEl = addMessage("system", "Reading the page and redacting PII locally...");
+}
+
+// Jarvis hand-off: while this panel is open, ask the background to check the server for a
+// queued task every 1.5s (the background's own alarm only fires every 30s).
+setInterval(() => {
+  if (activeRunId) return;
+  chrome.runtime.sendMessage({ type: "POLL_REMOTE_TASK" }, (response) => {
+    if (chrome.runtime.lastError || !response?.started) return;
+    adoptRemoteRun(response.started.runId, response.started.taskGoal);
+  });
+}, 1500);
+
+// Header status: is the server up, which planner model, and is it open-weights.
+async function refreshServerStatus(): Promise<void> {
+  try {
+    const res = await fetch(`${SERVER_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+    const info = await res.json();
+    const model = String(info.planner_model ?? "unknown").split("/").pop();
+    serverStatusEl.textContent = `Server online · ${model}${info.open_weights ? " (open-weights)" : " (not open-weights)"}`;
+    serverStatusEl.className = info.open_weights ? "server-status ok" : "server-status warn";
+  } catch {
+    serverStatusEl.textContent = "Server offline · run: node scripts/dev.mjs demo";
+    serverStatusEl.className = "server-status down";
+  }
+}
+void refreshServerStatus();
+setInterval(() => void refreshServerStatus(), 10000);
 
 addMessage(
   "system",

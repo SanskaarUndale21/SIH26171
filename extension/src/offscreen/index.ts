@@ -3,7 +3,7 @@ import { fuseForRedaction } from "../privacy/fuse";
 import { redactImage } from "../privacy/redact";
 import { buildStructuredSummary, classifyRiskTier } from "../privacy/manifest";
 import type { BuildContextOffscreenMessage, BuildContextResponse, ExtensionMessage } from "../messages";
-import type { NextActionRequest } from "../types";
+import type { ContextTimings, NextActionRequest } from "../types";
 
 // Runs entirely inside the offscreen document's own chrome-extension:// origin, under this
 // extension's manifest CSP -- not the host page's. That's the whole point of this file
@@ -22,13 +22,26 @@ async function dataUrlToCanvasAndBitmap(dataUrl: string): Promise<{ canvas: HTML
   return { canvas, bitmap };
 }
 
-async function buildContext(message: BuildContextOffscreenMessage): Promise<NextActionRequest> {
+// performance.memory is Chrome-only and non-standard, hence the cast; null elsewhere.
+function heapMB(): number | null {
+  const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+  return mem ? Math.round(mem.usedJSHeapSize / (1024 * 1024)) : null;
+}
+
+async function buildContext(
+  message: BuildContextOffscreenMessage
+): Promise<{ payload: NextActionRequest; timings: ContextTimings }> {
   const { screenshotDataUrl, domSnapshot, taskGoal } = message;
+  const t0 = performance.now();
   const { canvas, bitmap } = await dataUrlToCanvasAndBitmap(screenshotDataUrl);
+  const t1 = performance.now();
 
   const perception = await runPerception({ imageUrl: screenshotDataUrl, canvas, imageBitmap: bitmap });
+  const t2 = performance.now();
   const redactionManifest = fuseForRedaction(domSnapshot, perception.regions);
+  const t3 = performance.now();
   const sanitizedImage = redactImage(canvas, redactionManifest);
+  const t4 = performance.now();
   const structuredSummary = buildStructuredSummary(domSnapshot, redactionManifest);
   const riskTier = classifyRiskTier(structuredSummary, taskGoal);
 
@@ -41,18 +54,30 @@ async function buildContext(message: BuildContextOffscreenMessage): Promise<Next
   });
 
   return {
-    task_goal: taskGoal,
-    sanitized_image: sanitizedImage,
-    redaction_manifest: redactionManifest,
-    structured_summary: structuredSummary,
-    risk_tier: riskTier
+    payload: {
+      task_goal: taskGoal,
+      sanitized_image: sanitizedImage,
+      redaction_manifest: redactionManifest,
+      structured_summary: structuredSummary,
+      risk_tier: riskTier
+    },
+    timings: {
+      decodeMs: t1 - t0,
+      perceptionMs: t2 - t1,
+      fuseMs: t3 - t2,
+      redactMs: t4 - t3,
+      totalMs: performance.now() - t0,
+      detectors: perception.timings,
+      heapMB: heapMB(),
+      webgpu: "gpu" in navigator
+    }
   };
 }
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   if (message.type === "BUILD_CONTEXT_OFFSCREEN") {
     buildContext(message)
-      .then((payload) => sendResponse({ ok: true, payload } satisfies BuildContextResponse))
+      .then(({ payload, timings }) => sendResponse({ ok: true, payload, timings } satisfies BuildContextResponse))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true; // async response
   }

@@ -1,5 +1,5 @@
 import "./env-setup";
-import type { BBox, DetectedRegion } from "../types";
+import type { BBox, DetectedRegion, DetectorTimings } from "../types";
 import { runOcr, type OcrWord } from "./ocr";
 import { findPii } from "./regex";
 import { findNamedEntities } from "./ner";
@@ -33,6 +33,13 @@ function wordsForSpan(words: OcrWord[], joinedText: string, start: number, end: 
 export interface PerceptionResult {
   regions: DetectedRegion[];
   ocrFullText: string;
+  timings: DetectorTimings;
+}
+
+async function timed<T>(fn: () => Promise<T>): Promise<[T, number]> {
+  const t0 = performance.now();
+  const value = await fn();
+  return [value, performance.now() - t0];
 }
 
 export interface PerceptionInputs {
@@ -47,10 +54,10 @@ export interface PerceptionInputs {
 export async function runPerception(inputs: PerceptionInputs): Promise<PerceptionResult> {
   const regions: DetectedRegion[] = [];
 
-  const [ocr, faces, elements] = await Promise.all([
-    runOcr(inputs.imageUrl),
-    detectFaces(inputs.imageBitmap).catch(() => []),
-    detectElements(inputs.imageBitmap).catch(() => [])
+  const [[ocr, ocrMs], [faces, facesMs], [elements, yoloMs]] = await Promise.all([
+    timed(() => runOcr(inputs.imageUrl)),
+    timed(() => detectFaces(inputs.imageBitmap).catch(() => [])),
+    timed(() => detectElements(inputs.imageBitmap).catch(() => []))
   ]);
 
   for (const f of faces) {
@@ -61,6 +68,7 @@ export async function runPerception(inputs: PerceptionInputs): Promise<Perceptio
     regions.push({ label: el.label, bbox: el.bbox, confidence: el.confidence, source: "yolo" });
   }
 
+  const tFlorence = performance.now();
   try {
     const grounded = await groundElements(inputs.imageUrl);
     for (const g of grounded) {
@@ -69,6 +77,7 @@ export async function runPerception(inputs: PerceptionInputs): Promise<Perceptio
   } catch {
     // Florence-2 is a heavier fallback pass; degrade gracefully if unavailable.
   }
+  const florenceMs = performance.now() - tFlorence;
 
   const joinedText = ocr.words.map((w) => w.text).join(" ");
   const piiMatches = findPii(ocr.fullText || joinedText);
@@ -83,6 +92,7 @@ export async function runPerception(inputs: PerceptionInputs): Promise<Perceptio
     });
   }
 
+  const tNer = performance.now();
   try {
     const entities = await findNamedEntities(ocr.fullText || joinedText);
     for (const e of entities) {
@@ -99,5 +109,7 @@ export async function runPerception(inputs: PerceptionInputs): Promise<Perceptio
     // NER is best-effort; regex + DOM fusion already cover the hard PII types.
   }
 
-  return { regions, ocrFullText: ocr.fullText };
+  const nerMs = performance.now() - tNer;
+
+  return { regions, ocrFullText: ocr.fullText, timings: { ocrMs, facesMs, yoloMs, florenceMs, nerMs } };
 }

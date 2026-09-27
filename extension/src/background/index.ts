@@ -5,13 +5,18 @@ import type {
   ExtensionMessage,
   GetDomSnapshotResponse
 } from "../messages";
-import type { NextActionResponse, RedactionEntry, StructuredSummary } from "../types";
-import { requestNextAction } from "./server";
+import type { NextActionResponse, RedactionEntry, RunMetrics, StepMetrics, StructuredSummary } from "../types";
+import { claimRemoteTask, postTaskEvent, requestNextAction, type TimedAction } from "./server";
 import { getVaultAnswer, saveVaultAnswer } from "../privacy/vault";
 
 const OFFSCREEN_URL = "offscreen.html";
 const MAX_STEPS = 15;
 const STEP_SETTLE_MS = 700;
+const JARVIS_POLL_ALARM = "jarvis-poll";
+
+// runId -> hub task id, for runs handed over by the Jarvis desktop app. Their progress is
+// mirrored back to the server so Jarvis can show it (see relayToJarvis).
+const bridgedTasks = new Map<string, string>();
 
 // Clicking the toolbar icon opens the side panel instead of a popup -- a persistent sidebar
 // that stays open while you navigate, rather than a transient window that closes the moment
@@ -36,6 +41,70 @@ function broadcast(message: ExtensionMessage): void {
 function broadcastAll(tabId: number, message: ExtensionMessage): void {
   broadcast(message);
   chrome.tabs.sendMessage(tabId, message).catch(() => undefined);
+  relayToJarvis(message);
+}
+
+function typeCounts(manifest: RedactionEntry[] | undefined): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const entry of manifest ?? []) counts[entry.type] = (counts[entry.type] ?? 0) + 1;
+  return counts;
+}
+
+// Only summaries go back to the hub: step status, action type, selector, redaction TYPES and
+// timings. Never a field value, and never an ask-user answer: those are answered in the
+// browser and stay there.
+function relayToJarvis(message: ExtensionMessage): void {
+  if (!("runId" in message)) return;
+  const taskId = bridgedTasks.get(message.runId);
+  if (!taskId) return;
+  switch (message.type) {
+    case "TASK_STEP":
+      postTaskEvent(taskId, {
+        kind: "step",
+        text: `Step ${message.step}: ${message.status}`,
+        data: {
+          action: message.action?.action ?? null,
+          selector: message.action?.target.selector ?? null,
+          redacted: typeCounts(message.redactionManifest),
+          stepMs: message.metrics ? Math.round(message.metrics.stepMs) : null
+        }
+      });
+      break;
+    case "CONFIRM_REQUEST":
+      postTaskEvent(taskId, {
+        kind: "confirm",
+        text: `Waiting for your OK in the browser: ${message.action.action}${
+          message.action.target.selector ? ` on ${message.action.target.selector}` : ""
+        }`
+      });
+      break;
+    case "ASK_USER_REQUEST":
+      postTaskEvent(taskId, { kind: "ask", text: `Answer in the browser (stays local): ${message.question}` });
+      break;
+    case "TASK_DONE":
+      postTaskEvent(taskId, {
+        kind: "done",
+        text: message.message,
+        data: { reason: message.reason, metrics: message.metrics ?? null }
+      });
+      bridgedTasks.delete(message.runId);
+      break;
+  }
+}
+
+function summarize(steps: StepMetrics[], runStarted: number): RunMetrics {
+  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const heaps = steps.map((s) => s.context.heapMB).filter((h): h is number => h !== null);
+  return {
+    steps: steps.length,
+    totalMs: performance.now() - runStarted,
+    avgStepMs: avg(steps.map((s) => s.stepMs)),
+    avgPerceptionMs: avg(steps.map((s) => s.context.totalMs)),
+    avgPlannerMs: avg(steps.map((s) => s.plannerMs)),
+    peakHeapMB: heaps.length ? Math.max(...heaps) : null,
+    totalRedactions: steps.reduce((a, s) => a + s.redactions, 0),
+    sentKB: steps.reduce((a, s) => a + s.payloadKB, 0)
+  };
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
@@ -154,11 +223,16 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
   const tab = await getActiveTab();
   let tabId = tab.id!;
   const historyLines: string[] = [];
+  const runStarted = performance.now();
+  const stepMetrics: StepMetrics[] = [];
+  const done = (reason: "completed" | "max_steps" | "error" | "cancelled", message: string) =>
+    broadcastAll(tabId, { type: "TASK_DONE", runId, reason, message, metrics: summarize(stepMetrics, runStarted) });
 
   for (let step = 1; step <= MAX_STEPS; step++) {
+    const stepStart = performance.now();
     if (cancelledRuns.has(runId)) {
       cancelledRuns.delete(runId);
-      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped by user." });
+      done("cancelled", "Stopped by user.");
       return;
     }
 
@@ -166,11 +240,12 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       | GetDomSnapshotResponse
       | { ok: false; error: string };
     if (!domResponse.ok) {
-      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Failed to read page DOM: " + domResponse.error });
+      done("error", "Failed to read page DOM: " + domResponse.error);
       return;
     }
 
     const screenshotDataUrl = await chrome.tabs.captureVisibleTab({ format: "png" });
+    const captureMs = performance.now() - stepStart;
     await ensureOffscreenDocument();
 
     // The data contract's task_goal is a single string, so step history rides along inside
@@ -187,7 +262,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     };
     const buildResponse = (await chrome.runtime.sendMessage(buildMsg)) as BuildContextResponse | { ok: false; error: string };
     if (!buildResponse.ok) {
-      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Failed to build sanitized context: " + buildResponse.error });
+      done("error", "Failed to build sanitized context: " + buildResponse.error);
       return;
     }
 
@@ -195,13 +270,31 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       .sendMessage(tabId, { type: "SHOW_OVERLAY", manifest: buildResponse.payload.redaction_manifest })
       .catch(() => undefined);
 
-    let action: NextActionResponse;
+    let planned: TimedAction;
     try {
-      action = await requestNextAction(buildResponse.payload);
+      planned = await requestNextAction(buildResponse.payload);
     } catch (err) {
-      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Planner request failed: " + String(err) });
+      done("error", "Planner request failed: " + String(err));
       return;
     }
+    const action: NextActionResponse = planned.action;
+
+    // Agent time only: human think-time on a confirm/ask prompt is excluded from stepMs.
+    const payloadKB = JSON.stringify(buildResponse.payload).length / 1024;
+    const stepMetric = (execMs: number): StepMetrics => {
+      const m: StepMetrics = {
+        captureMs,
+        context: buildResponse.timings,
+        plannerMs: planned.roundTripMs,
+        serverMs: planned.serverMs,
+        execMs,
+        stepMs: captureMs + buildResponse.timings.totalMs + planned.roundTripMs + execMs,
+        payloadKB,
+        redactions: buildResponse.payload.redaction_manifest.length
+      };
+      stepMetrics.push(m);
+      return m;
+    };
 
     if (action.action === "none") {
       broadcastAll(tabId, {
@@ -210,9 +303,10 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
         step,
         status: "Task complete.",
         action,
-        redactionManifest: buildResponse.payload.redaction_manifest
+        redactionManifest: buildResponse.payload.redaction_manifest,
+        metrics: stepMetric(0)
       });
-      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "completed", message: "Done." });
+      done("completed", "Done.");
       return;
     }
 
@@ -229,6 +323,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       // instead of asking again -- still entirely local, still never sent to the planner.
       const savedAnswer = fieldLabel ? await getVaultAnswer(fieldLabel) : null;
       if (savedAnswer) {
+        const execStart = performance.now();
         const execResponse = (await chrome.tabs.sendMessage(tabId, {
           type: "EXECUTE_ACTION",
           action: "type",
@@ -238,6 +333,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
         const stepStatus = execResponse.ok
           ? `auto-filled "${fieldLabel}" from a saved answer (value not shared with the planner)`
           : `tried to auto-fill "${fieldLabel}" from a saved answer but failed: ${execResponse.error ?? "unknown"}`;
+        const execMs = performance.now() - execStart;
         historyLines.push(`step ${step}: ask_user ("${question}") -> ${stepStatus}`);
         broadcastAll(tabId, {
           type: "TASK_STEP",
@@ -245,7 +341,8 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
           step,
           status: stepStatus,
           action,
-          redactionManifest: buildResponse.payload.redaction_manifest
+          redactionManifest: buildResponse.payload.redaction_manifest,
+          metrics: stepMetric(execMs)
         });
         await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
         continue;
@@ -259,6 +356,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       pendingAskUser.delete(requestId);
 
       let stepStatus: string;
+      const execStart = performance.now();
       if (answer && answer.trim()) {
         const execResponse = (await chrome.tabs.sendMessage(tabId, {
           type: "EXECUTE_ACTION",
@@ -278,6 +376,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
         stepStatus = "asked the user; they chose not to answer, field left as-is";
       }
 
+      const execMs = performance.now() - execStart;
       historyLines.push(`step ${step}: ask_user ("${question}") -> ${stepStatus}`);
       broadcastAll(tabId, {
         type: "TASK_STEP",
@@ -285,7 +384,8 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
         step,
         status: stepStatus,
         action,
-        redactionManifest: buildResponse.payload.redaction_manifest
+        redactionManifest: buildResponse.payload.redaction_manifest,
+        metrics: stepMetric(execMs)
       });
       await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
       continue;
@@ -311,7 +411,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       });
       pendingConfirms.delete(requestId);
       if (!approved) {
-        broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "cancelled", message: "Stopped before a high-risk action (not confirmed)." });
+        done("cancelled", "Stopped before a high-risk action (not confirmed).");
         return;
       }
     }
@@ -321,6 +421,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
     // the tab's own location.href from inside it races the extension's own navigation intent.
     let execOk = true;
     let execError: string | undefined;
+    const execStart = performance.now();
 
     if (action.action === "open_tab") {
       const resolved = resolveNavigationUrl(action.value);
@@ -363,6 +464,7 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       execError = execResponse.error;
     }
 
+    const execMs = performance.now() - execStart;
     const stepStatus = execOk ? "action executed" : `action failed: ${execError ?? "unknown"}`;
     historyLines.push(
       `step ${step}: ${action.action}${action.target.selector ? ` on ${action.target.selector}` : ""} -> ${stepStatus}`
@@ -374,21 +476,22 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
       step,
       status: stepStatus,
       action,
-      redactionManifest: buildResponse.payload.redaction_manifest
+      redactionManifest: buildResponse.payload.redaction_manifest,
+      metrics: stepMetric(execMs)
     });
 
     if (!execOk) {
       // A failed action (stale selector, element gone after a re-render, ...) could in
       // principle be retried, but retrying blindly risks looping on a broken step forever --
       // stop and let the user look, rather than guess.
-      broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "error", message: "Stopped after a failed action." });
+      done("error", "Stopped after a failed action.");
       return;
     }
 
     await new Promise((resolve) => setTimeout(resolve, STEP_SETTLE_MS));
   }
 
-  broadcastAll(tabId, { type: "TASK_DONE", runId, reason: "max_steps", message: `Stopped after ${MAX_STEPS} steps without finishing.` });
+  done("max_steps", `Stopped after ${MAX_STEPS} steps without finishing.`);
 }
 
 // Both the side panel and the pill can trigger RUN_TASK, and both are always available at
@@ -396,20 +499,55 @@ async function runAgentLoop(runId: string, taskGoal: string): Promise<void> {
 // loops fighting over the same tab's DOM/screenshot/redaction state.
 let currentRunId: string | null = null;
 
+function startRun(taskGoal: string, source: "sidepanel" | "jarvis", taskId?: string): string {
+  const runId = genId();
+  currentRunId = runId;
+  if (taskId) bridgedTasks.set(runId, taskId);
+  broadcast({ type: "TASK_STARTED", runId, taskGoal, source });
+  runAgentLoop(runId, taskGoal)
+    .catch((err) => {
+      const message: ExtensionMessage = { type: "TASK_DONE", runId, reason: "error", message: String(err) };
+      broadcast(message);
+      relayToJarvis(message);
+    })
+    .finally(() => {
+      if (currentRunId === runId) currentRunId = null;
+    });
+  return runId;
+}
+
+// Picks up a browser task the Jarvis desktop app queued on the server. Called by the side
+// panel every ~1.5s while it's open, and by a 30s alarm otherwise (MV3's minimum period).
+async function pollRemoteTask(): Promise<{ runId: string; taskGoal: string } | null> {
+  if (currentRunId) return null;
+  const task = await claimRemoteTask();
+  if (!task) return null;
+  if (currentRunId) {
+    postTaskEvent(task.id, { kind: "error", text: "The browser agent is busy with another task." });
+    return null;
+  }
+  return { runId: startRun(task.goal, "jarvis", task.id), taskGoal: task.goal };
+}
+
+chrome.alarms.create(JARVIS_POLL_ALARM, { periodInMinutes: 0.5 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === JARVIS_POLL_ALARM) void pollRemoteTask();
+});
+
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
   if (message.type === "RUN_TASK") {
     if (currentRunId) {
       sendResponse({ ok: false, error: "A task is already running -- wait for it to finish or stop it first." });
       return false;
     }
-    const runId = genId();
-    currentRunId = runId;
-    sendResponse({ ok: true, runId });
-    runAgentLoop(runId, message.taskGoal)
-      .catch((err) => broadcast({ type: "TASK_DONE", runId, reason: "error", message: String(err) }))
-      .finally(() => {
-        if (currentRunId === runId) currentRunId = null;
-      });
+    sendResponse({ ok: true, runId: startRun(message.taskGoal, "sidepanel") });
+    return false;
+  }
+
+  if (message.type === "POLL_REMOTE_TASK") {
+    pollRemoteTask()
+      .then((started) => sendResponse({ ok: true, started }))
+      .catch(() => sendResponse({ ok: false, started: null }));
     return true;
   }
 

@@ -160,6 +160,33 @@
         padding: 2px 4px;
       }
       header { display: flex; align-items: flex-start; justify-content: space-between; }
+
+      .server-status { font-size: 10px; margin-top: 4px; display: inline-flex; align-items: center; gap: 5px; color: #6b7280; }
+      .server-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #d1d5db; }
+      .server-status.ok::before { background: #16a34a; }
+      .server-status.warn { color: #b45309; }
+      .server-status.warn::before { background: #f59e0b; }
+      .server-status.down { color: #b91c1c; }
+      .server-status.down::before { background: #ef4444; }
+
+      .metrics { margin-top: 6px; font-size: 11px; font-family: ui-monospace, monospace; color: #1f2937; }
+      .metrics.sub { margin-top: 2px; font-size: 10px; color: #6b7280; }
+
+      .from-jarvis { font-size: 10px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+
+      .msg.summary {
+        align-self: stretch;
+        max-width: 100%;
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 12px;
+        padding: 10px 12px;
+      }
+      .summary-title { font-size: 12px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px; }
+      .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 12px; }
+      .summary-grid div { display: flex; flex-direction: column; }
+      .summary-grid b { font-size: 14px; color: #0f172a; }
+      .summary-grid span { font-size: 10px; color: #64748b; }
       header .title-block { flex: 1; }
     </style>
   </head>
@@ -168,6 +195,7 @@
       <div class="title-block">
         <h1>Fusion Privacy Agent</h1>
         <p>PII is redacted on-device before anything is sent</p>
+        <div id="serverStatus" class="server-status">Checking server...</div>
       </div>
       <button id="voiceToggle" title="Toggle spoken responses">&#128266; voice</button>
       <button id="clearVault" title="Forget saved form answers (name, company, etc.)">&#128465;</button>

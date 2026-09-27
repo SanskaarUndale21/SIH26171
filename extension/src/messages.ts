@@ -1,4 +1,15 @@
-import type { ActionTarget, ActionType, DomSnapshot, NextActionRequest, NextActionResponse, RedactionEntry, RiskTier } from "./types";
+import type {
+  ActionTarget,
+  ActionType,
+  ContextTimings,
+  DomSnapshot,
+  NextActionRequest,
+  NextActionResponse,
+  RedactionEntry,
+  RiskTier,
+  RunMetrics,
+  StepMetrics
+} from "./types";
 
 // Content script -> background. Deliberately the only thing the content script does besides
 // executing actions and drawing the overlay: reading the DOM is cheap and safe on any page.
@@ -47,6 +58,7 @@ export interface TaskStepMessage {
   status: string;
   action?: NextActionResponse;
   redactionManifest?: RedactionEntry[];
+  metrics?: StepMetrics;
 }
 
 // Background -> sidepanel (broadcast). Sent once when the loop stops, for any reason.
@@ -55,6 +67,22 @@ export interface TaskDoneMessage {
   runId: string;
   reason: "completed" | "max_steps" | "error" | "cancelled";
   message: string;
+  metrics?: RunMetrics;
+}
+
+// Background -> sidepanel/pill (broadcast): a run started. Carries the goal so a surface that
+// didn't start the run itself (a task handed over by the Jarvis desktop app) can show it.
+export interface TaskStartedMessage {
+  type: "TASK_STARTED";
+  runId: string;
+  taskGoal: string;
+  source: "sidepanel" | "jarvis";
+}
+
+// Sidepanel -> background, every ~1.5s while the panel is open: pick up a task Jarvis queued
+// on the server, if any. The background also checks on a 30s alarm when the panel is closed.
+export interface PollRemoteTaskMessage {
+  type: "POLL_REMOTE_TASK";
 }
 
 // Background -> sidepanel (broadcast): a high_risk action (submit/payment/delete-shaped) is
@@ -132,7 +160,9 @@ export type ExtensionMessage =
   | AskUserRequestMessage
   | AskUserResponseMessage
   | CancelTaskMessage
-  | OpenSidePanelMessage;
+  | OpenSidePanelMessage
+  | TaskStartedMessage
+  | PollRemoteTaskMessage;
 
 export interface GetDomSnapshotResponse {
   ok: true;
@@ -142,6 +172,7 @@ export interface GetDomSnapshotResponse {
 export interface BuildContextResponse {
   ok: true;
   payload: NextActionRequest;
+  timings: ContextTimings;
 }
 
 export interface ExecuteActionResponse {

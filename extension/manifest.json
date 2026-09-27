@@ -3,7 +3,7 @@
   "name": "Fusion Privacy Agent",
   "version": "0.1.0",
   "description": "On-device visual perception, live redaction overlay, and eval-backed PII protection for a lightweight browser agent (SIH 26171)",
-  "permissions": ["activeTab", "scripting", "storage", "tabs", "offscreen", "sidePanel"],
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "offscreen", "sidePanel", "alarms"],
   "host_permissions": [
     "http://localhost:8100/*",
     "https://huggingface.co/*",
