@@ -61,7 +61,7 @@ function relayToJarvis(message: ExtensionMessage): void {
     case "TASK_STEP":
       postTaskEvent(taskId, {
         kind: "step",
-        text: `Step ${message.step}: ${message.status}`,
+        text: `Step ${message.step}: ${describeStep(message.action, message.status)}`,
         data: {
           action: message.action?.action ?? null,
           selector: message.action?.target.selector ?? null,
@@ -89,6 +89,28 @@ function relayToJarvis(message: ExtensionMessage): void {
       });
       bridgedTasks.delete(message.runId);
       break;
+  }
+}
+
+// Plain-language step text for Jarvis ("filled in #fullname"), same wording as the side panel.
+function describeStep(action: NextActionResponse | undefined, status: string): string {
+  if (!action || action.action === "ask_user" || /failed|error/i.test(status)) return status;
+  const sel = action.target.selector ?? "";
+  switch (action.action) {
+    case "click":
+      return `clicked ${sel}`.trim();
+    case "type":
+      return `filled in ${sel}`.trim();
+    case "scroll":
+      return "scrolled the page";
+    case "navigate":
+      return `went to ${action.value ?? "a page"}`;
+    case "open_tab":
+      return `opened a tab at ${action.value ?? "a blank page"}`;
+    case "none":
+      return "finished the task";
+    default:
+      return status;
   }
 }
 

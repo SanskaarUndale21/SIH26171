@@ -2,355 +2,390 @@ import type { NextActionResponse, RedactionEntry, RiskTier, RunMetrics, StepMetr
 import type { ExtensionMessage } from "../messages";
 import { clearVault } from "../privacy/vault";
 
-const messagesEl = document.getElementById("messages") as HTMLDivElement;
+const messagesEl = document.getElementById("messages") as HTMLElement;
+const composer = document.getElementById("composer") as HTMLFormElement;
 const goalInput = document.getElementById("goal") as HTMLTextAreaElement;
 const sendButton = document.getElementById("send") as HTMLButtonElement;
+const sendLabel = document.getElementById("sendLabel") as HTMLSpanElement;
 const micButton = document.getElementById("mic") as HTMLButtonElement;
 const voiceToggle = document.getElementById("voiceToggle") as HTMLButtonElement;
 const clearVaultButton = document.getElementById("clearVault") as HTMLButtonElement;
-const serverStatusEl = document.getElementById("serverStatus") as HTMLDivElement;
+const serverStatusEl = document.getElementById("serverStatus") as HTMLParagraphElement;
 
 const SERVER_BASE = "http://localhost:8100";
 
 let activeRunId: string | null = null;
-let activeThinkingEl: HTMLDivElement | null = null;
+let workingEl: HTMLElement | null = null;
+let stepsEl: HTMLOListElement | null = null;
+let introEl: HTMLElement | null = null;
 let pendingConfirmRespond: ((approved: boolean) => void) | null = null;
 let pendingAskUserRespond: ((answer: string | null) => void) | null = null;
 let voiceEnabled = true;
+
+// ---------- small DOM helpers (textContent only: nothing from a page or model is parsed as HTML)
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
 
 function scrollToBottom(): void {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-function addMessage(kind: "user" | "agent" | "error" | "system", text: string): HTMLDivElement {
-  const el = document.createElement("div");
-  el.className = `msg ${kind}`;
-  el.textContent = text;
-  messagesEl.appendChild(el);
+function add<T extends HTMLElement>(node: T): T {
+  introEl?.remove();
+  introEl = null;
+  messagesEl.appendChild(node);
   scrollToBottom();
-  return el;
-}
-
-// Voice output. Uses the browser's built-in speechSynthesis -- no new dependency, and unlike
-// speech recognition it runs fully client-side (no audio ever leaves the machine to produce
-// it). Only step/done/confirm messages are spoken, not the redaction chip/JSON detail, since
-// reading raw JSON aloud would be useless.
-function speak(text: string): void {
-  if (!voiceEnabled || !("speechSynthesis" in window)) return;
-  try {
-    window.speechSynthesis.cancel(); // don't queue up stale utterances behind a fast-moving run
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-  } catch {
-    // best-effort; speech synthesis failures should never block the visible chat log
-  }
-}
-
-function appendManifestChips(container: HTMLDivElement, manifest: RedactionEntry[]): void {
-  if (manifest.length === 0) return;
-  const row = document.createElement("div");
-  row.className = "manifest-chip-row";
-  for (const entry of manifest) {
-    const chip = document.createElement("span");
-    chip.className = "manifest-chip" + (entry.confidence < 0.5 ? " low-conf" : "");
-    chip.textContent = `${entry.type} ${(entry.confidence * 100).toFixed(0)}%`;
-    row.appendChild(chip);
-  }
-  container.appendChild(row);
-}
-
-function appendActionDetail(container: HTMLDivElement, action: NextActionResponse): void {
-  const details = document.createElement("details");
-  details.className = "action-detail";
-  const summary = document.createElement("summary");
-  summary.textContent = `${action.action}${action.target.selector ? ` → ${action.target.selector}` : ""}`;
-  const pre = document.createElement("pre");
-  pre.textContent = JSON.stringify(action, null, 2);
-  details.appendChild(summary);
-  details.appendChild(pre);
-  container.appendChild(details);
+  return node;
 }
 
 function fmtMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-// One compact line per step: where the time went and what it cost on this machine. Latency and
-// client resource use are scored metrics, so they're shown live, not only in a log.
-function appendStepMetrics(container: HTMLDivElement, m: StepMetrics): void {
-  const d = m.context.detectors;
-  const line = document.createElement("div");
-  line.className = "metrics";
-  const parts = [
-    `capture ${fmtMs(m.captureMs)}`,
-    `on-device ${fmtMs(m.context.totalMs)}`,
-    `planner ${fmtMs(m.plannerMs)}`,
-    `act ${fmtMs(m.execMs)}`
-  ];
-  line.textContent = `${fmtMs(m.stepMs)} total · ${parts.join(" · ")}`;
-  const detail = document.createElement("div");
-  detail.className = "metrics sub";
-  const heap = m.context.heapMB !== null ? `heap ${m.context.heapMB} MB · ` : "";
-  detail.textContent =
-    `${heap}${m.context.webgpu ? "WebGPU" : "WASM"} · sent ${m.payloadKB.toFixed(0)} KB · ` +
-    `ocr ${fmtMs(d.ocrMs)}, face ${fmtMs(d.facesMs)}, yolo ${fmtMs(d.yoloMs)}, florence ${fmtMs(d.florenceMs)}, ner ${fmtMs(d.nerMs)}`;
-  container.appendChild(line);
-  container.appendChild(detail);
+// Readable names for redaction types, used inside the black bars.
+const TYPE_NAMES: Record<string, string> = {
+  password_field: "password",
+  card_number: "card",
+  phone_number: "phone",
+  person_name: "name",
+  date_of_birth: "birth date",
+  bank_account: "account no.",
+  ip_address: "ip address"
+};
+const typeName = (t: string) => TYPE_NAMES[t] ?? t.replace(/_/g, " ");
+
+// ---------- voice out
+
+function speak(text: string): void {
+  if (!voiceEnabled || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  } catch {
+    // speech is a convenience; never let it break the log
+  }
+}
+
+// ---------- building blocks
+
+function setWorking(text: string | null): void {
+  workingEl?.remove();
+  workingEl = text ? add(el("p", "note working", text)) : null;
+}
+
+function masksFor(manifest: RedactionEntry[]): HTMLDivElement | null {
+  if (!manifest.length) return null;
+  const groups = new Map<string, { n: number; weak: boolean; conf: number[] }>();
+  for (const entry of manifest) {
+    const g = groups.get(entry.type) ?? { n: 0, weak: false, conf: [] };
+    g.n++;
+    g.conf.push(entry.confidence);
+    if (entry.confidence < 0.5) g.weak = true;
+    groups.set(entry.type, g);
+  }
+  const row = el("div", "masks");
+  row.setAttribute("aria-label", `${manifest.length} regions masked before sending`);
+  let i = 0;
+  for (const [type, g] of groups) {
+    const bar = el("span", g.weak ? "mask weak" : "mask", typeName(type));
+    if (g.n > 1) bar.appendChild(el("span", "n", `×${g.n}`));
+    bar.title = `${typeName(type)}: confidence ${g.conf.map((c) => Math.round(c * 100) + "%").join(", ")}${
+      g.weak ? " (weak, masked anyway)" : ""
+    }`;
+    bar.style.animationDelay = `${i++ * 60}ms`;
+    row.appendChild(bar);
+  }
+  return row;
+}
+
+function latencyStrip(local: number, remote: number, act: number, label: string): HTMLDivElement {
+  const strip = el("div", "lat");
+  strip.setAttribute("role", "img");
+  strip.setAttribute("aria-label", label);
+  const total = Math.max(local + remote + act, 1);
+  for (const [cls, v] of [["local", local], ["remote", remote], ["act", act]] as const) {
+    const seg = el("span", cls);
+    seg.style.flexGrow = String(v / total);
+    strip.appendChild(seg);
+  }
+  return strip;
+}
+
+function stepTitle(action: NextActionResponse | undefined, status: string): HTMLParagraphElement {
+  const p = el("p", "step-title");
+  const failed = /failed|error/i.test(status);
+  if (!action || failed || action.action === "ask_user") {
+    p.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    return p;
+  }
+  const sel = action.target.selector;
+  const verbs: Record<string, string> = {
+    click: "Clicked",
+    type: "Filled in",
+    scroll: "Scrolled the page",
+    navigate: "Went to",
+    open_tab: "Opened a tab at",
+    none: "Finished the task"
+  };
+  p.append(verbs[action.action] ?? action.action);
+  const where = action.action === "navigate" || action.action === "open_tab" ? action.value : sel;
+  if (where && action.action !== "scroll" && action.action !== "none") {
+    p.append(" ");
+    p.appendChild(el("code", "", where));
+  }
+  return p;
+}
+
+function sentDetails(action: NextActionResponse | undefined, m: StepMetrics | undefined): HTMLDetailsElement {
+  const details = el("details", "sent");
+  details.appendChild(el("summary", "", "What was measured and sent"));
+  if (m) {
+    const d = m.context.detectors;
+    const rows: [string, string][] = [
+      ["Sent to planner", `${m.payloadKB.toFixed(0)} KB, masked image and field types only`],
+      ["Memory in use", m.context.heapMB !== null ? `${m.context.heapMB} MB` : "not reported"],
+      ["Runs on", m.context.webgpu ? "WebGPU, WASM fallback" : "WASM"],
+      ["Capture", fmtMs(m.captureMs)],
+      ["Text reading (OCR)", fmtMs(d.ocrMs)],
+      ["Faces", fmtMs(d.facesMs)],
+      ["Objects (YOLO)", fmtMs(d.yoloMs)],
+      ["Layout (Florence-2)", fmtMs(d.florenceMs)],
+      ["Names (NER)", fmtMs(d.nerMs)],
+      ["Planner, server side", m.serverMs !== null ? fmtMs(m.serverMs) : "not reported"]
+    ];
+    const dl = el("dl");
+    for (const [k, v] of rows) dl.append(el("dt", "", k), el("dd", "", v));
+    details.appendChild(dl);
+  }
+  if (action) details.appendChild(el("pre", "", JSON.stringify(action, null, 2)));
+  return details;
+}
+
+function ensureSteps(): HTMLOListElement {
+  if (!stepsEl || !stepsEl.isConnected) stepsEl = add(el("ol", "steps"));
+  return stepsEl;
+}
+
+function addStep(step: number, status: string, action?: NextActionResponse, manifest?: RedactionEntry[], m?: StepMetrics): void {
+  const li = el("li", /failed|error/i.test(status) ? "step failed" : "step");
+  li.appendChild(el("div", "step-n", String(step)));
+  const body = el("div", "step-body");
+  body.appendChild(stepTitle(action, status));
+  const masks = masksFor(manifest ?? []);
+  if (masks) body.appendChild(masks);
+  if (m) {
+    const local = m.captureMs + m.context.totalMs;
+    body.appendChild(
+      latencyStrip(local, m.plannerMs, m.execMs, `${fmtMs(local)} on this device, ${fmtMs(m.plannerMs)} at the planner`)
+    );
+    const text = el("p", "lat-text");
+    text.append(el("b", "", fmtMs(m.stepMs)), ` total, ${fmtMs(local)} on this device, ${fmtMs(m.plannerMs)} planner`);
+    body.appendChild(text);
+  }
+  body.appendChild(sentDetails(action, m));
+  li.appendChild(body);
+  ensureSteps().appendChild(li);
+  // keep the working indicator below the newest step
+  if (workingEl) messagesEl.appendChild(workingEl);
+  scrollToBottom();
 }
 
 function addRunSummary(m: RunMetrics): void {
   if (!m.steps) return;
-  const el = document.createElement("div");
-  el.className = "msg summary";
-  const title = document.createElement("div");
-  title.className = "summary-title";
-  title.textContent = "Run summary";
-  el.appendChild(title);
-  const grid = document.createElement("div");
-  grid.className = "summary-grid";
-  const cells: [string, string][] = [
-    ["Steps", String(m.steps)],
-    ["Total time", fmtMs(m.totalMs)],
-    ["Avg step", fmtMs(m.avgStepMs)],
-    ["Avg on-device", fmtMs(m.avgPerceptionMs)],
-    ["Avg planner", fmtMs(m.avgPlannerMs)],
-    ["Peak heap", m.peakHeapMB !== null ? `${m.peakHeapMB} MB` : "n/a"],
-    ["Regions masked", String(m.totalRedactions)],
-    ["Sent to server", `${m.sentKB.toFixed(0)} KB`]
-  ];
-  for (const [k, v] of cells) {
-    const cell = document.createElement("div");
-    const val = document.createElement("b");
-    val.textContent = v;
-    const key = document.createElement("span");
-    key.textContent = k;
-    cell.append(val, key);
-    grid.appendChild(cell);
-  }
-  el.appendChild(grid);
-  messagesEl.appendChild(el);
-  scrollToBottom();
+  const box = el("section", "summary");
+  box.setAttribute("aria-label", "Run summary");
+  box.appendChild(el("h2", "", `Finished in ${fmtMs(m.totalMs)}`));
+  const local = m.avgPerceptionMs;
+  const remote = m.avgPlannerMs;
+  const other = Math.max(m.avgStepMs - local - remote, 0);
+  box.appendChild(latencyStrip(local, remote, other, `Average step: ${fmtMs(local)} on this device, ${fmtMs(remote)} at the planner`));
+  box.appendChild(el("p", "lat-text", `Average step ${fmtMs(m.avgStepMs)}: ${fmtMs(local)} on this device, ${fmtMs(remote)} at the planner`));
+  const dl = el("dl");
+  const cell = (k: string, v: string, unit?: string) => {
+    const pair = el("div");
+    const dd = el("dd", "", v);
+    if (unit) dd.appendChild(el("small", "", ` ${unit}`));
+    pair.append(el("dt", "", k), dd);
+    dl.appendChild(pair);
+  };
+  cell("Steps", String(m.steps));
+  cell("Regions masked", String(m.totalRedactions));
+  cell("Sent to planner", m.sentKB.toFixed(0), "KB");
+  cell("Peak memory", m.peakHeapMB !== null ? String(m.peakHeapMB) : "n/a", m.peakHeapMB !== null ? "MB" : undefined);
+  box.appendChild(dl);
+  add(box);
 }
+
+// ---------- running state
 
 function setRunning(running: boolean): void {
-  sendButton.innerHTML = running ? "&#9632;" : "&#8593;"; // square (stop) / up-arrow (send)
-  sendButton.title = running ? "Stop task" : "Run task";
+  sendButton.classList.toggle("running", running);
+  sendButton.title = running ? "Stop" : "Run";
+  sendLabel.textContent = running ? "Stop" : "Run";
   if (!running) {
     activeRunId = null;
-    activeThinkingEl?.remove();
-    activeThinkingEl = null;
+    setWorking(null);
+    stepsEl = null;
   }
 }
 
-function addConfirmPrompt(
-  requestId: string,
-  action: NextActionResponse,
-  riskTier: RiskTier,
-  unfilledSensitiveTypes: string[]
-): void {
-  const el = document.createElement("div");
-  el.className = "msg agent";
-  const label = document.createElement("div");
-  let questionText = `This looks like a ${riskTier.replace("_", " ")} action: ${action.action}${
-    action.target.selector ? ` on ${action.target.selector}` : ""
-  }.`;
-  // Real bug this closes: the agent correctly never fills password/email/card/phone (it
-  // can't see their values), but was silently submitting anyway with them still empty and
-  // calling the task done. Surfacing what's still redacted here gives the user an actual
-  // chance to go fill those in before confirming, instead of finding out after the fact.
-  if (unfilledSensitiveTypes.length > 0) {
-    questionText += ` Note: ${unfilledSensitiveTypes.join(", ")} on this page were never filled in by the agent (by design) -- make sure you've filled them in yourself if this form needs them.`;
-  }
-  questionText += " Go ahead? You can say yes or no.";
-  label.textContent = questionText;
-  speak(questionText);
-  el.appendChild(label);
+// ---------- prompts that wait for the person
 
-  const row = document.createElement("div");
-  row.style.display = "flex";
-  row.style.gap = "6px";
-  row.style.marginTop = "6px";
+function addConfirmPrompt(requestId: string, action: NextActionResponse, _riskTier: RiskTier, unfilled: string[]): void {
+  setWorking(null);
+  const box = el("section", "prompt");
+  box.appendChild(el("h2", "", "Needs your OK"));
+  const target = action.target.selector ? ` ${action.target.selector}` : "";
+  const text = `The next step is to ${action.action === "click" ? "click" : action.action}${target}. That can submit, pay or delete, so it waits for you.`;
+  box.appendChild(el("p", "", text));
+  if (unfilled.length) {
+    box.appendChild(el("p", "", "These are still empty, because the agent never fills them for you:"));
+    const list = el("div", "still-empty");
+    for (const t of unfilled) list.appendChild(el("span", "", typeName(t)));
+    box.appendChild(list);
+  }
+  const row = el("div", "row");
+  const yes = el("button", "btn go", "Go ahead");
+  const no = el("button", "btn quiet", "Stop here");
+  row.append(yes, no);
+  box.appendChild(row);
+  box.appendChild(el("p", "hint", "You can also say yes or no."));
 
   const respond = (approved: boolean) => {
     chrome.runtime.sendMessage({ type: "CONFIRM_RESPONSE", requestId, approved });
-    yesBtn.disabled = true;
-    noBtn.disabled = true;
-    label.textContent += approved ? " (confirmed)" : " (stopped)";
-    row.remove();
+    row.replaceWith(el("p", "answered", approved ? "You said go ahead." : "You stopped it here."));
+    box.querySelector(".hint")?.remove();
     if (pendingConfirmRespond === respond) pendingConfirmRespond = null;
+    if (approved) setWorking("Working");
   };
   pendingConfirmRespond = respond;
-
-  const yesBtn = document.createElement("button");
-  yesBtn.textContent = "Yes, continue";
-  yesBtn.style.cssText = "flex:1;padding:6px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;";
-  yesBtn.addEventListener("click", () => respond(true));
-
-  const noBtn = document.createElement("button");
-  noBtn.textContent = "No, stop";
-  noBtn.style.cssText = "flex:1;padding:6px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;";
-  noBtn.addEventListener("click", () => respond(false));
-
-  row.appendChild(yesBtn);
-  row.appendChild(noBtn);
-  el.appendChild(row);
-  messagesEl.appendChild(el);
-  scrollToBottom();
+  yes.addEventListener("click", () => respond(true));
+  no.addEventListener("click", () => respond(false));
+  add(box);
+  speak(`${text} Go ahead?`);
+  yes.focus();
 }
 
-// A field the planner has no value for -- asked directly instead of guessed. The typed
-// answer goes straight to background -> EXECUTE_ACTION and is never sent to the server (see
-// background/index.ts's ask_user branch); the chat log only ever shows the question, not
-// anything about what gets typed back.
+// A field the planner has no value for. The answer goes straight to the page through the
+// background script and is never sent to the server (see background/index.ts, ask_user).
 function addAskUserPrompt(requestId: string, question: string): void {
-  const el = document.createElement("div");
-  el.className = "msg agent";
-  const label = document.createElement("div");
-  label.textContent = question;
-  speak(question);
-  el.appendChild(label);
-
-  const input = document.createElement("textarea");
-  input.placeholder = "Type your answer... (never sent to the server)";
-  input.style.cssText = "width:100%;margin-top:6px;height:36px;resize:none;border-radius:8px;border:1px solid #d1d5db;padding:6px;font-size:12px;font-family:inherit;";
-
-  const row = document.createElement("div");
-  row.style.display = "flex";
-  row.style.gap = "6px";
-  row.style.marginTop = "6px";
+  setWorking(null);
+  const box = el("section", "prompt local");
+  box.appendChild(el("h2", "", question));
+  const input = el("input");
+  input.type = "text";
+  input.setAttribute("aria-label", question);
+  input.placeholder = "Your answer";
+  const row = el("div", "row");
+  const fill = el("button", "btn go", "Fill it in");
+  const skip = el("button", "btn quiet", "Skip");
+  row.append(fill, skip);
+  box.append(input, row, el("p", "hint", "Your answer is typed into the page from here. It never goes to the planner."));
 
   const respond = (answer: string | null) => {
     chrome.runtime.sendMessage({ type: "ASK_USER_RESPONSE", requestId, answer });
-    fillBtn.disabled = true;
-    skipBtn.disabled = true;
-    input.disabled = true;
-    label.textContent += answer ? " (answered)" : " (skipped)";
-    row.remove();
+    input.remove();
+    row.replaceWith(el("p", "answered", answer ? "Filled in. Kept in this browser only." : "Skipped."));
     if (pendingAskUserRespond === respond) pendingAskUserRespond = null;
+    setWorking("Working");
   };
   pendingAskUserRespond = respond;
-
-  const fillBtn = document.createElement("button");
-  fillBtn.textContent = "Fill it in";
-  fillBtn.style.cssText = "flex:1;padding:6px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-size:12px;";
-  fillBtn.addEventListener("click", () => respond(input.value.trim() || null));
-
-  const skipBtn = document.createElement("button");
-  skipBtn.textContent = "Skip";
-  skipBtn.style.cssText = "flex:1;padding:6px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;";
-  skipBtn.addEventListener("click", () => respond(null));
-
+  fill.addEventListener("click", () => respond(input.value.trim() || null));
+  skip.addEventListener("click", () => respond(null));
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
       respond(input.value.trim() || null);
     }
   });
-
-  row.appendChild(fillBtn);
-  row.appendChild(skipBtn);
-  el.appendChild(input);
-  el.appendChild(row);
-  messagesEl.appendChild(el);
+  add(box);
+  speak(question);
   input.focus();
-  scrollToBottom();
+}
+
+// ---------- running a task
+
+function addYou(text: string, fromJarvis = false): void {
+  const bubble = el("div", "you");
+  if (fromJarvis) bubble.appendChild(el("span", "from", "Sent from Jarvis"));
+  bubble.append(text);
+  add(bubble);
 }
 
 function autoGrow(): void {
   goalInput.style.height = "auto";
-  goalInput.style.height = `${Math.min(goalInput.scrollHeight, 90)}px`;
+  goalInput.style.height = `${Math.min(goalInput.scrollHeight, 110)}px`;
 }
 
 function runTask(): void {
   const taskGoal = goalInput.value.trim();
   if (!taskGoal || activeRunId) return;
-
-  addMessage("user", taskGoal);
+  addYou(taskGoal);
   goalInput.value = "";
   autoGrow();
   setRunning(true);
-  activeThinkingEl = addMessage("system", "Reading the page and redacting PII locally...");
+  setWorking("Reading the page and masking private data on this device");
 
   chrome.runtime.sendMessage({ type: "RUN_TASK", taskGoal }, (response) => {
-    if (chrome.runtime.lastError) {
+    if (chrome.runtime.lastError || !response?.ok) {
       setRunning(false);
-      addMessage("error", "Error: " + chrome.runtime.lastError.message);
-      return;
-    }
-    if (!response?.ok) {
-      setRunning(false);
-      addMessage("error", "Error: " + (response?.error ?? "unknown"));
+      add(el("p", "error", `Couldn't start: ${chrome.runtime.lastError?.message ?? response?.error ?? "unknown error"}`));
       return;
     }
     activeRunId = response.runId as string;
   });
 }
 
+function adoptRemoteRun(runId: string, taskGoal: string): void {
+  if (activeRunId === runId) return;
+  addYou(taskGoal, true);
+  setRunning(true);
+  activeRunId = runId;
+  setWorking("Reading the page and masking private data on this device");
+}
+
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
-  if (message.type === "TASK_STEP") {
-    if (message.runId !== activeRunId) return;
-    activeThinkingEl?.remove();
-    const agentMsg = addMessage("agent", `Step ${message.step}: ${message.status}`);
-    speak(message.status);
-    if (message.redactionManifest?.length) appendManifestChips(agentMsg, message.redactionManifest);
-    if (message.metrics) appendStepMetrics(agentMsg, message.metrics);
-    if (message.action) appendActionDetail(agentMsg, message.action);
-    activeThinkingEl = addMessage("system", "Working...");
-    scrollToBottom();
-    return;
-  }
-
-  if (message.type === "TASK_DONE") {
-    if (message.runId !== activeRunId) return;
-    setRunning(false);
-    addMessage(message.reason === "error" ? "error" : "system", message.message);
-    if (message.metrics) addRunSummary(message.metrics);
-    speak(message.message);
-    return;
-  }
-
-  if (message.type === "TASK_STARTED") {
-    // A run this panel didn't start itself: handed over from the Jarvis desktop app (picked up
-    // by the background's own alarm, or by this panel's poll below).
-    if (message.source !== "jarvis" || activeRunId === message.runId) return;
-    adoptRemoteRun(message.runId, message.taskGoal);
-    return;
-  }
-
-  if (message.type === "CONFIRM_REQUEST") {
-    if (message.runId !== activeRunId) return;
-    activeThinkingEl?.remove();
-    activeThinkingEl = null;
-    addConfirmPrompt(message.requestId, message.action, message.riskTier, message.unfilledSensitiveTypes);
-    return;
-  }
-
-  if (message.type === "ASK_USER_REQUEST") {
-    if (message.runId !== activeRunId) return;
-    activeThinkingEl?.remove();
-    activeThinkingEl = null;
-    addAskUserPrompt(message.requestId, message.question);
-    return;
+  switch (message.type) {
+    case "TASK_STEP":
+      if (message.runId !== activeRunId) return;
+      addStep(message.step, message.status, message.action, message.redactionManifest, message.metrics);
+      speak(message.status);
+      setWorking("Working");
+      return;
+    case "TASK_DONE":
+      if (message.runId !== activeRunId) return;
+      setRunning(false);
+      if (message.reason === "error") add(el("p", "error", message.message));
+      else add(el("p", "done", message.message));
+      if (message.metrics) addRunSummary(message.metrics);
+      speak(message.message);
+      return;
+    case "TASK_STARTED":
+      if (message.source === "jarvis") adoptRemoteRun(message.runId, message.taskGoal);
+      return;
+    case "CONFIRM_REQUEST":
+      if (message.runId !== activeRunId) return;
+      addConfirmPrompt(message.requestId, message.action, message.riskTier, message.unfilledSensitiveTypes);
+      return;
+    case "ASK_USER_REQUEST":
+      if (message.runId !== activeRunId) return;
+      addAskUserPrompt(message.requestId, message.question);
+      return;
   }
 });
 
-// Voice input, push-to-talk: click to start recording, click again to stop and transcribe.
-// This used to run on Chrome's built-in SpeechRecognition (webkitSpeechRecognition), which
-// turned out to be a dead end on two counts -- Chrome does not expose that API to
-// chrome-extension:// origins at all (it's undefined there), which is the actual reason voice
-// input never worked from this side panel; and even where it does work, it sends raw audio to
-// Google's servers, a separate data path this project's whole design argues against. This
-// records locally via getUserMedia (a normal, universally-supported API, unlike
-// SpeechRecognition) and transcribes with a small Whisper model running on-device in this
-// same page (see perception/asr.ts) -- audio never leaves the browser.
-let listening = false;
+// ---------- voice in: recorded here, transcribed by Whisper on this device (perception/asr.ts)
+// Chrome's SpeechRecognition isn't available to extension pages and would send audio to
+// Google anyway; this records with getUserMedia and never lets audio leave the browser.
+
 let mediaStream: MediaStream | null = null;
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
-
-function setListening(value: boolean): void {
-  listening = value;
-  micButton.classList.toggle("listening", value);
-}
 
 function mixToMono(buffer: AudioBuffer): Float32Array {
   const out = new Float32Array(buffer.length);
@@ -365,98 +400,103 @@ async function startRecording(): Promise<void> {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    addMessage("error", "Microphone access was denied or unavailable: " + String(err));
+    add(el("p", "error", `Microphone is blocked or missing. Allow it for this extension and try again. (${String(err)})`));
     return;
   }
+  window.speechSynthesis?.cancel();
   audioChunks = [];
   mediaRecorder = new MediaRecorder(mediaStream);
   mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) audioChunks.push(e.data);
   };
   mediaRecorder.start();
-  setListening(true);
+  micButton.classList.add("listening");
+  micButton.title = "Stop and transcribe";
 }
 
 async function stopRecordingAndTranscribe(): Promise<void> {
   const recorder = mediaRecorder;
   if (!recorder) return;
-  const mimeType = recorder.mimeType;
   const blob: Blob = await new Promise((resolve) => {
-    recorder.onstop = () => resolve(new Blob(audioChunks, { type: mimeType }));
+    recorder.onstop = () => resolve(new Blob(audioChunks, { type: recorder.mimeType }));
     recorder.stop();
   });
   mediaStream?.getTracks().forEach((t) => t.stop());
   mediaStream = null;
   mediaRecorder = null;
-  setListening(false);
+  micButton.classList.remove("listening");
+  micButton.title = "Speak your task (transcribed on this device)";
 
-  const thinkingEl = addMessage("system", "Transcribing locally (first run downloads/loads the on-device model)...");
+  const note = add(el("p", "note working", "Transcribing on this device"));
   try {
-    const arrayBuffer = await blob.arrayBuffer();
-    // Whisper expects mono audio at 16kHz -- creating the AudioContext with that sample rate
-    // makes decodeAudioData resample to it, so no separate resampling step is needed.
     const audioCtx = new AudioContext({ sampleRate: 16000 });
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    const decoded = await audioCtx.decodeAudioData(await blob.arrayBuffer());
     const samples = decoded.numberOfChannels > 1 ? mixToMono(decoded) : decoded.getChannelData(0);
-    const { transcribeAudio } = await import("../perception/asr");
-    const text = await transcribeAudio(samples);
-    thinkingEl.remove();
-
-    if (!text) {
-      addMessage("error", "Didn't catch any speech in that recording -- try again.");
+    void audioCtx.close();
+    // Whisper "hears" words in silence, so a quiet clip is rejected before transcribing.
+    let energy = 0;
+    for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
+    if (!samples.length || Math.sqrt(energy / samples.length) < 0.004) {
+      note.remove();
+      add(el("p", "error", "Didn't hear anything. Try again a little closer to the mic."));
       return;
     }
-    goalInput.value = text;
-    autoGrow();
-
+    const { transcribeAudio } = await import("../perception/asr");
+    const text = await transcribeAudio(samples);
+    note.remove();
+    if (!text) {
+      add(el("p", "error", "Didn't catch any words. Try again."));
+      return;
+    }
     const lower = text.toLowerCase();
     if (pendingAskUserRespond) {
-      // Free-text answer, not a yes/no -- whatever was said is the value to fill in.
-      pendingAskUserRespond(text || null);
-      goalInput.value = "";
+      pendingAskUserRespond(text);
       return;
     }
     if (pendingConfirmRespond) {
-      if (/\b(yes|confirm|go ahead|do it|proceed)\b/.test(lower)) {
-        pendingConfirmRespond(true);
-        goalInput.value = "";
-        return;
-      }
-      if (/\b(no|stop|cancel)\b/.test(lower)) {
-        pendingConfirmRespond(false);
-        goalInput.value = "";
-        return;
-      }
+      if (/\b(yes|confirm|go ahead|do it|proceed)\b/.test(lower)) return pendingConfirmRespond(true);
+      if (/\b(no|stop|cancel)\b/.test(lower)) return pendingConfirmRespond(false);
     }
+    goalInput.value = text;
+    autoGrow();
     runTask();
   } catch (err) {
-    thinkingEl.remove();
-    addMessage("error", "Voice transcription failed: " + String(err));
+    note.remove();
+    add(el("p", "error", `Transcription failed: ${String(err)}`));
   }
 }
 
-function toggleListening(): void {
-  if (listening) {
-    void stopRecordingAndTranscribe();
-  } else {
-    void startRecording();
-  }
+micButton.addEventListener("click", () => {
+  if (mediaRecorder) void stopRecordingAndTranscribe();
+  else void startRecording();
+});
+
+// ---------- header tools
+
+try {
+  voiceEnabled = localStorage.getItem("fpa.voice") !== "off";
+} catch {
+  // storage can be unavailable; spoken progress simply stays on
 }
-
-micButton.addEventListener("click", toggleListening);
-
+voiceToggle.setAttribute("aria-pressed", String(voiceEnabled));
 voiceToggle.addEventListener("click", () => {
   voiceEnabled = !voiceEnabled;
-  voiceToggle.classList.toggle("off", !voiceEnabled);
+  voiceToggle.setAttribute("aria-pressed", String(voiceEnabled));
   if (!voiceEnabled) window.speechSynthesis?.cancel();
+  try {
+    localStorage.setItem("fpa.voice", voiceEnabled ? "on" : "off");
+  } catch {
+    // ignore
+  }
 });
 
 clearVaultButton.addEventListener("click", async () => {
   await clearVault();
-  addMessage("system", "Forgot all saved form answers -- it'll ask again next time.");
+  add(el("p", "done", "Forgot every saved answer. It will ask again next time."));
 });
 
-sendButton.addEventListener("click", () => {
+composer.addEventListener("submit", (e) => {
+  e.preventDefault();
   if (activeRunId) {
     chrome.runtime.sendMessage({ type: "CANCEL_TASK", runId: activeRunId });
     return;
@@ -471,20 +511,9 @@ goalInput.addEventListener("keydown", (e) => {
   }
 });
 
-function adoptRemoteRun(runId: string, taskGoal: string): void {
-  if (activeRunId === runId) return;
-  const el = addMessage("user", taskGoal);
-  const tag = document.createElement("div");
-  tag.className = "from-jarvis";
-  tag.textContent = "from Jarvis";
-  el.prepend(tag);
-  setRunning(true);
-  activeRunId = runId;
-  activeThinkingEl = addMessage("system", "Reading the page and redacting PII locally...");
-}
+// ---------- Jarvis hand-off: while this panel is open, check for queued tasks every 1.5 s
+// (the background's own alarm only fires every 30 s).
 
-// Jarvis hand-off: while this panel is open, ask the background to check the server for a
-// queued task every 1.5s (the background's own alarm only fires every 30s).
 setInterval(() => {
   if (activeRunId) return;
   chrome.runtime.sendMessage({ type: "POLL_REMOTE_TASK" }, (response) => {
@@ -493,23 +522,43 @@ setInterval(() => {
   });
 }, 1500);
 
-// Header status: is the server up, which planner model, and is it open-weights.
+// ---------- server status in the header
+
 async function refreshServerStatus(): Promise<void> {
   try {
     const res = await fetch(`${SERVER_BASE}/health`, { signal: AbortSignal.timeout(2500) });
     const info = await res.json();
     const model = String(info.planner_model ?? "unknown").split("/").pop();
-    serverStatusEl.textContent = `Server online · ${model}${info.open_weights ? " (open-weights)" : " (not open-weights)"}`;
-    serverStatusEl.className = info.open_weights ? "server-status ok" : "server-status warn";
+    serverStatusEl.textContent = info.open_weights
+      ? `Planner online, ${model}, open weights`
+      : `Planner online, ${model}, not open weights`;
+    serverStatusEl.dataset.state = info.open_weights ? "ok" : "warn";
   } catch {
-    serverStatusEl.textContent = "Server offline · run: node scripts/dev.mjs demo";
-    serverStatusEl.className = "server-status down";
+    serverStatusEl.textContent = "Planner offline. Start it with node scripts/dev.mjs demo";
+    serverStatusEl.dataset.state = "down";
   }
 }
 void refreshServerStatus();
 setInterval(() => void refreshServerStatus(), 10000);
 
-addMessage(
-  "system",
-  "Open a page, then tell it what to do -- type or press the mic. PII never leaves your browser unredacted. It works step by step, speaks its progress, and asks before submit/payment-style actions (say yes or no)."
-);
+// ---------- first screen: what the colours mean, then get out of the way
+
+function showIntro(): void {
+  const box = el("div", "intro");
+  box.appendChild(el("p", "", "Open a page and say what to do. Before anything is sent, private details on the screen are blacked out on this device."));
+  const legend = el("ul", "legend");
+  const item = (swatch: HTMLElement, text: string) => {
+    const li = el("li");
+    li.append(swatch, text);
+    legend.appendChild(li);
+  };
+  item(el("span", "swatch local"), "Work done on this device");
+  item(el("span", "swatch remote"), "Time spent at the planner server");
+  const bar = el("span", "mask", "email");
+  bar.style.animation = "none";
+  item(bar, "Masked before sending");
+  box.appendChild(legend);
+  messagesEl.appendChild(box);
+  introEl = box;
+}
+showIntro();
