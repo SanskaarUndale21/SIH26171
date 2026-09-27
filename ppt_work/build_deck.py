@@ -393,10 +393,10 @@ drop(find(s4, "TextBox 8"))
 section(s4, 0.45, 1.22, 6.6, "Analysis of the feasibility of the idea")
 metrics = [
     ("25%", "Visual context accuracy", "Florence-2 captions + YOLO elements fused with the real DOM list, so actions hit real selectors"),
-    ("20%", "PII recall / precision", "4 detectors (DOM, regex with Luhn, NER, BlazeFace) fused; eval harness: 5/5 fields, 0 false positives"),
-    ("20%", "Redaction precision", "Pixel-exact DOM boxes; DOM-safe zones suppress vision false positives"),
-    ("20%", "Client resources", "int8 / fp16 quantized models, loaded lazily in one offscreen document"),
-    ("15%", "End-to-end latency", "DOM-first fast path, WebGPU inference, fusion step under 1 ms"),
+    ("20%", "PII recall / precision", "DOM + regex (Luhn, Verhoeff) + NER + BlazeFace fused; eval: 100% recall, 91.3% precision"),
+    ("20%", "Redaction precision", "Pixel-exact DOM boxes; eval: 92.8% of masked pixels are sensitive, mean IoU 0.99"),
+    ("20%", "Client resources", "int8 / fp16 models in one offscreen doc; heap and WebGPU shown live per step"),
+    ("15%", "End-to-end latency", "Per-step breakdown shown live: capture, on-device, planner, act"),
 ]
 my = 1.6
 for w_, name, how in metrics:
@@ -502,7 +502,7 @@ refcols = [
     ("Web agents and policy", NAVY, [
         ("SeeAct", "Zheng et al., ICML 2024, arXiv:2401.01614"),
         ("Mind2Web", "Deng et al., NeurIPS 2023, arXiv:2306.06070"),
-        ("Llama 3.2 Vision", "hf.co/meta-llama/Llama-3.2-11B-Vision-Instruct"),
+        ("Llama 4 Scout (open-weights VLM)", "hf.co/meta-llama/Llama-4-Scout-17B-16E-Instruct"),
         ("DPDP Act 2023", "meity.gov.in, Digital Personal Data Protection Act"),
         ("SIH 2026 PS 26171", "ISRO / SAC, On-device Visual Perception for Browser Agents"),
     ]),
@@ -523,8 +523,8 @@ st = rect(s6, 0.45, 5.62, 12.44, 1.08, fill=NAVY, radius=0.1)
 icon_disc(s6, 0.65, 5.85, 0.62, GREEN, "flask")
 text(s6, 1.45, 5.72, 11.2, 0.3, "Our own research: working prototype + reproducible eval harness", size=13, bold=True, color=WHITE)
 text(s6, 1.45, 6.04, 11.2, 0.6,
-     "MV3 extension + FastAPI server built and running. Eval (eval/results.md) runs the real redaction code on a "
-     "labelled fixture: 5/5 sensitive fields redacted, 0/2 false positives, 0 Luhn-invalid card hits, fusion in 0.85 ms.",
+     "Extension, server and Jarvis desktop companion built. Eval (eval/results.md) runs the shipping redaction code on "
+     "32 labelled items: 100% recall, 91.3% precision, 92.8% pixel precision; text PII 100% / 100% on 25 cases.",
      size=11, color=WHITE)
 
 
