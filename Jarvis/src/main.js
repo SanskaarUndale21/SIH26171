@@ -1,7 +1,8 @@
 const path = require("path");
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, session: electronSession } = require("electron");
 const config = require("./config");
 const { Session, runTurn } = require("./agent");
+const perception = require("./perception");
 
 const HOTKEY = "CommandOrControl+Shift+J";
 const ASSETS = path.join(__dirname, "..", "assets");
@@ -12,7 +13,7 @@ let busy = false;
 const session = new Session();
 const pendingConfirms = new Map();
 
-if (!app.requestSingleInstanceLock()) {
+if (!process.argv.includes("--self-test") && !app.requestSingleInstanceLock()) {
   app.quit();
 }
 
@@ -100,7 +101,7 @@ ipcMain.handle("chat:send", async (_e, text) => {
       cfg: config.load(),
       emit: send,
       confirm: askConfirm,
-      ctx: { hideWindow: () => win.hide() },
+      ctx: { hideWindow: () => win.hide(), showWindow },
     });
     return { ok: true };
   } catch (err) {
@@ -131,10 +132,55 @@ ipcMain.handle("config:get", () => config.publicView());
 ipcMain.handle("config:set", (_e, update) => config.save(update || {}));
 ipcMain.on("window:hide", () => win.hide());
 
+// Push-to-talk: the renderer records and resamples to 16 kHz mono, Whisper runs here on-device.
+ipcMain.handle("voice:transcribe", async (_e, samples) => {
+  if (!perception.modelsAvailable()) return { ok: false, error: "Whisper model not found (extension/public/models)." };
+  try {
+    return { ok: true, text: await perception.transcribe(Float32Array.from(samples)) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 app.on("second-instance", showWindow);
 
+// `npm run self-test`: proves the on-device stack loads inside Electron (not just Node) before
+// a demo. Uses a synthetic image, never the real screen; screen capture is only size-checked.
+async function selfTest() {
+  const sharp = require("sharp");
+  const { desktopCapturer } = require("electron");
+  const report = { modelsDir: perception.MODELS_ROOT };
+  const step = (name) => console.error(`[self-test] ${name}`);
+  try {
+    step("redaction (OCR + NER + YOLO)");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="200"><rect width="100%" height="100%" fill="#fff"/>
+      <text x="30" y="80" font-family="Arial" font-size="32">Mail priya.sharma@example.org</text>
+      <text x="30" y="150" font-family="Arial" font-size="32">Mobile 98765 43210, Rahul Verma</text></svg>`;
+    const r = await perception.redactScreen(await sharp(Buffer.from(svg)).png().toBuffer());
+    report.redaction = { masked: r.manifest.map((m) => m.type), ms: Math.round(r.timings.totalMs) };
+    step("whisper");
+    const t0 = performance.now();
+    report.whisper = { text: await perception.transcribe(new Float32Array(16000)), ms: Math.round(performance.now() - t0) };
+    step("screen capture");
+    const [src] = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 320, height: 180 } });
+    report.screenCapture = src ? "ok" : "no screen";
+    report.ok = report.redaction.masked.includes("email") && report.redaction.masked.includes("phone");
+  } catch (err) {
+    report.ok = false;
+    report.error = err.stack || String(err);
+  }
+  console.log(JSON.stringify(report, null, 2));
+  await perception.shutdown();
+  app.exit(report.ok ? 0 : 1);
+}
+
 app.whenReady().then(() => {
+  if (process.argv.includes("--self-test")) return selfTest();
   if (process.platform === "win32") app.setAppUserModelId("com.hexabits.jarvis");
+  // Only the microphone is ever granted, and only to Jarvis's own window.
+  electronSession.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
+    callback(permission === "media" && wc === win?.webContents)
+  );
   createWindow();
   createTray();
   if (!globalShortcut.register(HOTKEY, toggleWindow)) {
@@ -155,5 +201,8 @@ app.whenReady().then(() => {
   }
 });
 
-app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+  void perception.shutdown();
+});
 app.on("window-all-closed", (e) => e.preventDefault());

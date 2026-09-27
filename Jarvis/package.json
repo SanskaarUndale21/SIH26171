@@ -7,10 +7,15 @@
   "scripts": {
     "start": "electron .",
     "icons": "node scripts/make-icons.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "self-test": "electron . --self-test"
   },
   "devDependencies": {
-    "electron": "^44.4.5",
+    "electron": "^44.4.5"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "tesseract.js": "^5.1.1",
     "sharp": "^0.34.0"
   }
 }

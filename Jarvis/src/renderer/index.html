@@ -16,6 +16,9 @@
       </div>
     </div>
     <div class="actions">
+      <button class="icon-btn" id="speak" title="Spoken replies on/off" aria-label="Spoken replies" aria-pressed="true">
+        <svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+      </button>
       <button class="icon-btn" id="newChat" title="New chat" aria-label="New chat">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       </button>
@@ -32,17 +35,21 @@
     <div class="empty" id="empty">
       <img src="../../assets/icon-512.png" alt="" />
       <h1>How can I help?</h1>
-      <p>Personal details are masked on this computer before anything reaches the model, and I ask before every risky action.</p>
+      <p>Your voice, your screen and personal details are processed on this computer. Only masked data reaches the model, and I ask before every risky action.</p>
       <div class="chips">
+        <button class="chip">Fill in the scholarship form in Chrome. My email is priya.sharma@example.org</button>
+        <button class="chip">What's on my screen right now?</button>
         <button class="chip">What's using the most disk space in Downloads?</button>
-        <button class="chip">Open the SIH 2026 website</button>
         <button class="chip">Summarise what's on my clipboard</button>
       </div>
     </div>
   </main>
 
   <form id="composer">
-    <textarea id="input" rows="1" placeholder="Ask Jarvis..." autocomplete="off"></textarea>
+    <button type="button" id="micBtn" title="Push to talk (on-device Whisper)" aria-label="Voice input">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <textarea id="input" rows="1" placeholder="Ask Jarvis, or press the mic..." autocomplete="off"></textarea>
     <button type="submit" id="sendBtn" aria-label="Send">
       <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
@@ -51,8 +58,11 @@
   <section id="settings" class="sheet" hidden>
     <div class="sheet-card">
       <h2>Settings</h2>
-      <label>Endpoint (OpenAI-compatible)
+      <label>Model endpoint (OpenAI-compatible; default is the SIH server)
         <input id="cfgBase" type="url" spellcheck="false" />
+      </label>
+      <label>SIH server (browser task bridge)
+        <input id="cfgHub" type="url" spellcheck="false" />
       </label>
       <label>Model
         <input id="cfgModel" type="text" spellcheck="false" />

@@ -19,23 +19,62 @@ function luhnValid(digits) {
   return sum % 10 === 0;
 }
 
-// Order matters: card numbers go before Aadhaar/phone so a 16-digit card isn't half-eaten by a
-// shorter pattern first. Secrets only redact the value after the keyword, not the keyword.
-const PATTERNS = [
-  { type: "SECRET", re: /\b(password|passwd|pwd|pin|otp|api[_-]?key|token|secret)(\s*[:=]\s*|\s+is\s+)(\S+)/gi, group: 3 },
-  { type: "EMAIL", re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
-  {
-    type: "CARD",
-    re: /\b\d(?:[ -]?\d){12,18}\b/g,
-    check: (m) => luhnValid(m.replace(/\D/g, "")),
-  },
-  { type: "AADHAAR", re: /\b[2-9]\d{3}[ -]?\d{4}[ -]?\d{4}\b/g },
-  { type: "PAN", re: /\b[A-Z]{5}\d{4}[A-Z]\b/g },
-  { type: "PHONE", re: /(?:\+91[ -]?)?\b[6-9]\d{4}[ -]?\d{5}\b/g },
-  { type: "IP", re: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g },
+// Verhoeff checksum: the last digit of every real Aadhaar number is one.
+const VD = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 2, 3, 4, 0, 6, 7, 8, 9, 5], [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+  [3, 4, 0, 1, 2, 8, 9, 5, 6, 7], [4, 0, 1, 2, 3, 9, 5, 6, 7, 8], [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+  [6, 5, 9, 8, 7, 1, 0, 4, 3, 2], [7, 6, 5, 9, 8, 2, 1, 0, 4, 3], [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+  [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+];
+const VP = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [1, 5, 7, 6, 2, 8, 3, 0, 9, 4], [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+  [8, 9, 1, 6, 0, 4, 3, 5, 2, 7], [9, 4, 5, 3, 1, 2, 6, 8, 7, 0], [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+  [2, 7, 9, 3, 8, 0, 6, 4, 1, 5], [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
 ];
 
-const TOKEN_RE = /\[(SECRET|EMAIL|CARD|AADHAAR|PAN|PHONE|IP)_\d+\]/g;
+function verhoeffValid(digits) {
+  let c = 0;
+  for (let i = 0; i < digits.length; i++) {
+    c = VD[c][VP[i % 8][digits.charCodeAt(digits.length - 1 - i) - 48]];
+  }
+  return c === 0;
+}
+
+const CHECKS = { luhn: luhnValid, verhoeff: verhoeffValid };
+
+// Patterns come from shared/pii-rules.json, the same file the browser extension uses for OCR
+// text, so both halves of the project mask exactly the same kinds of data.
+const RULES = require("../../shared/pii-rules.json").rules.map((r) => ({
+  type: r.token,
+  re: new RegExp(r.pattern, r.flags.includes("g") ? r.flags : r.flags + "g"),
+  group: r.group,
+  check: r.check ? (m) => CHECKS[r.check](m.replace(/\D/g, "")) : null,
+}));
+
+const TOKEN_RE = new RegExp(String.raw`\[(${RULES.map((r) => r.type).join("|")})_\d+\]`, "g");
+
+// Span-level matches for OCR text (screen redaction), same semantics as the extension's
+// perception/regex.ts: earlier rules win on overlap, grouped rules report only the value.
+function findPii(text) {
+  const matches = [];
+  const overlaps = (s, e) => matches.some((m) => s < m.end && e > m.start);
+  for (const { type, re, group, check } of RULES) {
+    re.lastIndex = 0;
+    for (const m of text.matchAll(re)) {
+      let value = m[0];
+      let start = m.index;
+      if (group) {
+        value = m[group] || "";
+        start += m[0].length - value.length;
+      }
+      if (check && !check(value)) continue;
+      const end = start + value.length;
+      if (overlaps(start, end)) continue;
+      matches.push({ type, text: value, start, end });
+    }
+  }
+  return matches.sort((a, b) => a.start - b.start);
+}
 
 class Redactor {
   constructor() {
@@ -59,11 +98,12 @@ class Redactor {
     if (typeof input !== "string" || !input) return { text: input ?? "", found: [] };
     let text = input;
     const found = [];
-    for (const { type, re, group, check } of PATTERNS) {
+    for (const { type, re, group, check } of RULES) {
       text = text.replace(re, (...m) => {
         const whole = m[0];
         if (group) {
           const value = m[group];
+          if (check && !check(value)) return whole;
           found.push(type);
           return whole.slice(0, whole.length - value.length) + this.tokenFor(type, value);
         }
@@ -90,4 +130,4 @@ class Redactor {
   }
 }
 
-module.exports = { Redactor, luhnValid };
+module.exports = { Redactor, findPii, luhnValid, verhoeffValid };

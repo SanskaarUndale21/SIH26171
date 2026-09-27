@@ -1,15 +1,18 @@
 // Settings live in the OS user-data folder, never in the repo. The API key is encrypted with
 // Electron's safeStorage (DPAPI on Windows, Keychain on macOS) when available. Env vars
-// JARVIS_BASE_URL / JARVIS_API_KEY / JARVIS_MODEL override the file, handy for demos.
+// JARVIS_BASE_URL / JARVIS_API_KEY / JARVIS_MODEL / JARVIS_HUB_URL override the file.
 const fs = require("fs");
 const path = require("path");
 const { app, safeStorage } = require("electron");
 
 const DEFAULTS = {
-  // Any OpenAI-compatible endpoint with tool calling: Groq, OpenRouter, Together, a local
-  // Ollama / vLLM / llama.cpp server. Defaults to an open-weights model.
-  baseUrl: "https://api.groq.com/openai/v1",
-  model: "llama-3.3-70b-versatile",
+  // By default Jarvis talks to the project's own server, which proxies to the configured
+  // open-weights model (server/.env), so there is one key and one model config for the whole
+  // project. Point this at any OpenAI-compatible endpoint to run Jarvis standalone.
+  baseUrl: "http://localhost:8100/api/jarvis",
+  model: "server-default",
+  // The SIH server that bridges browser tasks to the extension.
+  hubUrl: "http://localhost:8100",
   autoApproveLow: false,
 };
 
@@ -39,6 +42,7 @@ function load() {
   return {
     baseUrl: process.env.JARVIS_BASE_URL || stored.baseUrl || DEFAULTS.baseUrl,
     model: process.env.JARVIS_MODEL || stored.model || DEFAULTS.model,
+    hubUrl: process.env.JARVIS_HUB_URL || stored.hubUrl || DEFAULTS.hubUrl,
     apiKey: process.env.JARVIS_API_KEY || decryptKey(stored),
     autoApproveLow: stored.autoApproveLow ?? DEFAULTS.autoApproveLow,
   };
@@ -47,13 +51,21 @@ function load() {
 // What the renderer is allowed to see: never the key itself.
 function publicView() {
   const c = load();
-  return { baseUrl: c.baseUrl, model: c.model, hasKey: Boolean(c.apiKey), autoApproveLow: c.autoApproveLow };
+  return {
+    baseUrl: c.baseUrl,
+    model: c.model,
+    hubUrl: c.hubUrl,
+    hasKey: Boolean(c.apiKey),
+    needsKey: !isLocal(c.baseUrl),
+    autoApproveLow: c.autoApproveLow,
+  };
 }
 
 function save(update) {
   const stored = readFile();
   if (typeof update.baseUrl === "string") stored.baseUrl = update.baseUrl.trim().replace(/\/+$/, "");
   if (typeof update.model === "string") stored.model = update.model.trim();
+  if (typeof update.hubUrl === "string") stored.hubUrl = update.hubUrl.trim().replace(/\/+$/, "");
   if (typeof update.autoApproveLow === "boolean") stored.autoApproveLow = update.autoApproveLow;
   if (typeof update.apiKey === "string" && update.apiKey.trim()) {
     const key = update.apiKey.trim();
@@ -70,4 +82,8 @@ function save(update) {
   return publicView();
 }
 
-module.exports = { load, publicView, save };
+function isLocal(url) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url || "");
+}
+
+module.exports = { load, publicView, save, isLocal };
