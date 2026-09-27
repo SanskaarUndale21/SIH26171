@@ -74,6 +74,8 @@ lightweight, honest version of that idea), and any Qwen or other Chinese-origin 
 - `eval/` — bundles and runs the real redaction/PII logic against a ground-truth fixture.
 - `demo/` — a sample form fixture for manual testing.
 - `scripts/` — the dev server launcher.
+- `Jarvis/` — desktop companion (Electron tray assistant) with the same redact-before-cloud rule
+  and per-action approval. See `Jarvis/README.md`.
 
 ## Setup
 

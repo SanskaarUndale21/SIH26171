@@ -1,0 +1,16 @@
+{
+  "name": "jarvis",
+  "version": "1.0.0",
+  "description": "Jarvis: privacy-first desktop assistant. Redacts PII locally before anything reaches the LLM, and asks before every action.",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icons": "node scripts/make-icons.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "sharp": "^0.34.0"
+  }
+}

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:" />
+  <title>Jarvis</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <img src="../../assets/icon-512.png" alt="" class="logo" />
+      <div>
+        <div class="name">Jarvis</div>
+        <div class="status" id="status"><span class="dot"></span><span id="statusText">Ready</span></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" id="newChat" title="New chat" aria-label="New chat">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+      <button class="icon-btn" id="hide" title="Hide (Ctrl+Shift+J)" aria-label="Hide">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="log" aria-live="polite">
+    <div class="empty" id="empty">
+      <img src="../../assets/icon-512.png" alt="" />
+      <h1>How can I help?</h1>
+      <p>Personal details are masked on this computer before anything reaches the model, and I ask before every risky action.</p>
+      <div class="chips">
+        <button class="chip">What's using the most disk space in Downloads?</button>
+        <button class="chip">Open the SIH 2026 website</button>
+        <button class="chip">Summarise what's on my clipboard</button>
+      </div>
+    </div>
+  </main>
+
+  <form id="composer">
+    <textarea id="input" rows="1" placeholder="Ask Jarvis..." autocomplete="off"></textarea>
+    <button type="submit" id="sendBtn" aria-label="Send">
+      <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+
+  <section id="settings" class="sheet" hidden>
+    <div class="sheet-card">
+      <h2>Settings</h2>
+      <label>Endpoint (OpenAI-compatible)
+        <input id="cfgBase" type="url" spellcheck="false" />
+      </label>
+      <label>Model
+        <input id="cfgModel" type="text" spellcheck="false" />
+      </label>
+      <label>API key
+        <input id="cfgKey" type="password" spellcheck="false" />
+      </label>
+      <label class="check">
+        <input id="cfgAuto" type="checkbox" />
+        <span>Auto-approve low-risk actions (open URL, clipboard)</span>
+      </label>
+      <p class="hint">The key is stored encrypted on this machine and never shown back.</p>
+      <div class="row">
+        <button type="button" class="ghost" id="cfgCancel">Cancel</button>
+        <button type="button" class="primary" id="cfgSave">Save</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
