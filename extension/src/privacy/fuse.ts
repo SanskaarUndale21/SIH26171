@@ -1,4 +1,4 @@
-import type { BBox, DetectedRegion, DomSnapshot, PiiType, RedactionEntry } from "../types";
+import type { BBox, DetectedRegion, DomFieldInfo, DomSnapshot, PiiType, RedactionEntry } from "../types";
 import { fuseVisionConfidence } from "./confidence";
 
 function scaleBBox([x, y, w, h]: BBox, scale: number): BBox {
@@ -27,6 +27,26 @@ function domFieldPiiType(inputType: string | null): PiiType | null {
   return null;
 }
 
+// Name/placeholder hints for fields whose `type` says nothing (Indian e-gov forms put Aadhaar,
+// PAN and account numbers in plain type="text" inputs). Checked before the textarea/select
+// "safe" rule, so an address textarea is still redacted.
+const DOM_NAME_HINTS: [RegExp, PiiType][] = [
+  [/card|cc-?num|credit/i, "card_number"],
+  [/aadhaa?r|uidai|\buid\b/i, "aadhaar"],
+  [/\bpan\b|\bpan[_-]?(no|num|card)/i, "pan"],
+  [/account[_-]?(no|num)|\bacc(t)?[_-]?no\b/i, "bank_account"],
+  [/\bdob\b|birth/i, "date_of_birth"],
+  [/\botp\b|\bcvv\b|\bcvc\b|\bpin\b/i, "secret"],
+  [/mobile|phone/i, "phone_number"],
+  [/address|street/i, "address"]
+];
+
+function domHintType(field: DomFieldInfo): PiiType | null {
+  const haystack = `${field.name ?? ""} ${field.placeholder ?? ""} ${field.selector}`;
+  for (const [re, type] of DOM_NAME_HINTS) if (re.test(haystack)) return type;
+  return null;
+}
+
 // DOM signal wins when it disagrees with vision: any vision region that overlaps a DOM
 // field is dropped in favor of the DOM-authoritative type; DOM fields are always redacted
 // even if vision missed them entirely.
@@ -42,21 +62,32 @@ export function fuseForRedaction(dom: DomSnapshot, visionRegions: DetectedRegion
   const domSafeBoxes: BBox[] = [];
 
   for (const field of dom.fields) {
-    const piiType = domFieldPiiType(field.inputType);
-    const looksLikeCard = /card|cc-?num|credit/i.test(`${field.name ?? ""} ${field.placeholder ?? ""}`);
-    const finalType = piiType ?? (looksLikeCard ? "card_number" : null);
+    if (field.isSubmit || field.tag === "button" || field.tag === "select") {
+      if (field.tag === "select") domSafeBoxes.push(scaleBBox(field.bbox, scale));
+      continue;
+    }
+    const finalType = domFieldPiiType(field.inputType) ?? domHintType(field);
     if (finalType) {
       const bbox = scaleBBox(field.bbox, scale);
       domBoxes.push(bbox);
       entries.push({ type: finalType, bbox, confidence: 0.99, method: "blackbox" });
       continue;
     }
-    if (field.tag === "textarea" || field.tag === "select") {
+    if (field.tag === "textarea") {
       domSafeBoxes.push(scaleBBox(field.bbox, scale));
     }
   }
 
-  const visionKeepTypes = new Set(["face", "card_number", "email", "phone_number", "person_name"]);
+  const visionKeepTypes = new Set([
+    "face",
+    "card_number",
+    "email",
+    "phone_number",
+    "person_name",
+    "aadhaar",
+    "pan",
+    "secret"
+  ]);
   const relevantVision = visionRegions.filter((r) => visionKeepTypes.has(r.label));
   // Independent detectors agreeing on the same span (e.g. regex + NER both flagging the same
   // text) get combined into one higher-confidence entry instead of two separate weak ones.

@@ -21,9 +21,13 @@ async function getWorker(): Promise<Worker> {
     // "importScripts ... failed to load" error against cdn.jsdelivr.net. Pointing it at
     // copies bundled under public/tesseract/ keeps everything same-origin, and also means
     // this keeps working with no network access once the extension is installed.
+    // langPath too: without it Tesseract downloads eng.traineddata from jsdelivr on first use,
+    // the one network fetch left in the perception stack. The bundled file is the same
+    // 4.0.0_best_int data (LSTM-only, matching OEM 1) Tesseract would have fetched.
     workerPromise = createWorker("eng", 1, {
       workerPath: chrome.runtime.getURL("tesseract/worker.min.js"),
       corePath: chrome.runtime.getURL("tesseract/tesseract-core-simd-lstm.wasm.js"),
+      langPath: chrome.runtime.getURL("tesseract/lang"),
       workerBlobURL: false
     });
   }

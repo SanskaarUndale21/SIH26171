@@ -8,7 +8,14 @@ export type PiiType =
   | "email"
   | "phone_number"
   | "face"
-  | "person_name";
+  | "person_name"
+  | "aadhaar"
+  | "pan"
+  | "bank_account"
+  | "date_of_birth"
+  | "address"
+  | "secret"
+  | "ip_address";
 
 export interface RedactionEntry {
   type: PiiType | string;
@@ -89,4 +96,47 @@ export interface DetectedRegion {
   bbox: BBox;
   confidence: number;
   source: "yolo" | "florence" | "blazeface" | "ocr+regex" | "ocr+ner" | "dom";
+}
+
+// Per-step cost of one agent iteration, measured on the client. Shown live in the side panel
+// and folded into a run summary, because latency and client resource use are scored metrics.
+export interface DetectorTimings {
+  ocrMs: number;
+  facesMs: number;
+  yoloMs: number;
+  florenceMs: number;
+  nerMs: number;
+}
+
+export interface ContextTimings {
+  decodeMs: number;
+  perceptionMs: number;
+  fuseMs: number;
+  redactMs: number;
+  totalMs: number;
+  detectors: DetectorTimings;
+  heapMB: number | null; // JS heap of the offscreen document, where the models live
+  webgpu: boolean;
+}
+
+export interface StepMetrics {
+  captureMs: number; // DOM snapshot + screenshot
+  context: ContextTimings; // on-device perception + redaction
+  plannerMs: number; // server round trip
+  serverMs: number | null; // model time reported by the server
+  execMs: number;
+  stepMs: number;
+  payloadKB: number; // everything sent to the server this step
+  redactions: number;
+}
+
+export interface RunMetrics {
+  steps: number;
+  totalMs: number;
+  avgStepMs: number;
+  avgPerceptionMs: number;
+  avgPlannerMs: number;
+  peakHeapMB: number | null;
+  totalRedactions: number;
+  sentKB: number;
 }
